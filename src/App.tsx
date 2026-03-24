@@ -258,14 +258,16 @@ export default function App() {
               panelId={filtersPanelId}
             />
           </div>
-          <h1 className="header__title">{schedule.meta.name}</h1>
-          <div className="header__end">
+          <div className="header__brand">
+            <h1 className="header__title">{schedule.meta.name}</h1>
             <div className="header__rating-wrap" aria-hidden="true">
               <RatingCountsSummary
                 counts={activeDayRatingCounts}
                 className="header__rating-summary"
               />
             </div>
+          </div>
+          <div className="header__end">
             <div className="header__settings">
               <ThemeSettings />
             </div>

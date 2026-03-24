@@ -11,6 +11,7 @@ import {
   type ShowOnDay,
 } from "@/lib/scheduleByDay";
 import { ExternalLink } from "@/components/ExternalLink";
+import { ThemeSettings } from "@/components/ThemeSettings";
 import type { ScheduleDoc } from "@/types/schedule";
 
 import scheduleJson from "../data/schedule.json";
@@ -183,14 +184,19 @@ export default function App() {
 
   if (dayKeys.length === 0) {
     return (
-      <div className="app app--empty">
-        <p>No shows in schedule.</p>
-      </div>
+      <>
+        <ThemeSettings />
+        <div className="app app--empty">
+          <p>No shows in schedule.</p>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className={`app${selectedCount > 0 ? " app--selecting" : ""}`}>
+    <>
+      <ThemeSettings />
+      <div className={`app${selectedCount > 0 ? " app--selecting" : ""}`}>
       <header className="header">
         <h1 className="header__title">{schedule.meta.name}</h1>
         <p className="header__meta">
@@ -517,5 +523,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </>
   );
 }

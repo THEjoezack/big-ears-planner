@@ -1,4 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { DateTime } from "luxon";
 
 import { useHiddenVenues } from "@/hooks/useHiddenVenues";
@@ -11,7 +18,11 @@ import {
   type ShowOnDay,
 } from "@/lib/scheduleByDay";
 import { ExternalLink } from "@/components/ExternalLink";
+import { RatingCountsSummary } from "@/components/RatingCountsSummary";
+import { FilterTrigger } from "@/components/FilterTrigger";
 import { ThemeSettings } from "@/components/ThemeSettings";
+import { TopBarActions } from "@/components/TopBarActions";
+import { useSwipeChangeDay } from "@/hooks/useSwipeChangeDay";
 import type { ScheduleDoc } from "@/types/schedule";
 
 import scheduleJson from "../data/schedule.json";
@@ -71,6 +82,25 @@ function compareRows(
   return a.effectiveStart.toMillis() - b.effectiveStart.toMillis();
 }
 
+function countRatingsForDay(
+  dayKey: string,
+  dayMap: Map<string, ShowOnDay[]>,
+  getRating: (id: string) => ShowRating,
+  venueIsHidden: (venueId: string) => boolean
+) {
+  const list = dayMap.get(dayKey) ?? [];
+  const counts = { love: 0, like: 0, skip: 0, unset: 0 };
+  for (const row of list) {
+    if (venueIsHidden(row.show.venueId)) continue;
+    const r = getRating(row.show.id);
+    if (r === "love") counts.love++;
+    else if (r === "like") counts.like++;
+    else if (r === "skip") counts.skip++;
+    else counts.unset++;
+  }
+  return counts;
+}
+
 function formatRange(show: ShowOnDay["show"], zone: string): string {
   const s = DateTime.fromISO(show.start, { zone });
   const e = DateTime.fromISO(show.end, { zone });
@@ -126,6 +156,29 @@ export default function App() {
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const activeDayHeadingId = useId();
+  const filtersPanelId = useId();
+  const dayTabsNavRef = useRef<HTMLElement>(null);
+  const tabBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  const swipeDayHandlers = useSwipeChangeDay(dayKeys, activeDay, setActiveDay);
+
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => {
+      tabBtnRefs.current.get(activeDay)?.scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest",
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [activeDay]);
+
+  const activeDayRatingCounts = useMemo(
+    () =>
+      countRatingsForDay(activeDay, byDay, getRating, (vid) => isHidden(vid)),
+    [activeDay, byDay, getRating, isHidden]
+  );
 
   const rows = useMemo(() => {
     const list = byDay.get(activeDay) ?? [];
@@ -185,7 +238,7 @@ export default function App() {
   if (dayKeys.length === 0) {
     return (
       <>
-        <ThemeSettings />
+        <TopBarActions />
         <div className="app app--empty">
           <p>No shows in schedule.</p>
         </div>
@@ -195,23 +248,43 @@ export default function App() {
 
   return (
     <>
-      <ThemeSettings />
       <div className={`app${selectedCount > 0 ? " app--selecting" : ""}`}>
       <header className="header">
-        <h1 className="header__title">{schedule.meta.name}</h1>
-        <p className="header__meta">
-          {schedule.meta.year} · {zone.replace("_", " ")} ·{" "}
-          {schedule.shows.length} shows
-          {schedule.meta.descriptionCount != null
-            ? ` · ${schedule.meta.descriptionCount} with descriptions`
-            : null}
-        </p>
+        <div className="header__top">
+          <div className="header__start">
+            <FilterTrigger
+              filtersOpen={filtersOpen}
+              onToggle={() => setFiltersOpen((o) => !o)}
+              panelId={filtersPanelId}
+            />
+          </div>
+          <h1 className="header__title">{schedule.meta.name}</h1>
+          <div className="header__end">
+            <div className="header__rating-wrap" aria-hidden="true">
+              <RatingCountsSummary
+                counts={activeDayRatingCounts}
+                className="header__rating-summary"
+              />
+            </div>
+            <div className="header__settings">
+              <ThemeSettings />
+            </div>
+          </div>
+        </div>
       </header>
 
-      <nav className="day-tabs" aria-label="Festival days">
+      <nav
+        ref={dayTabsNavRef}
+        className="day-tabs"
+        aria-label="Festival days"
+      >
         {dayKeys.map((key) => (
           <button
             key={key}
+            ref={(el) => {
+              if (el) tabBtnRefs.current.set(key, el);
+              else tabBtnRefs.current.delete(key);
+            }}
             type="button"
             className={`day-tabs__btn${key === activeDay ? " is-active" : ""}`}
             onClick={() => setActiveDay(key)}
@@ -221,21 +294,31 @@ export default function App() {
         ))}
       </nav>
 
-      <div className="toolbar">
-        <button
-          type="button"
-          className="toolbar__filters"
-          aria-expanded={filtersOpen}
-          aria-controls="filters-panel"
-          onClick={() => setFiltersOpen((o) => !o)}
-        >
-          {filtersOpen ? "Hide filters" : "Filters"}
-        </button>
-      </div>
+      <div
+        className="app__day-swipe"
+        role="region"
+        aria-label="Schedule — swipe left or right to change day"
+        onTouchStart={swipeDayHandlers.onTouchStart}
+        onTouchEnd={swipeDayHandlers.onTouchEnd}
+      >
+      <section
+        className="day-section"
+        aria-labelledby={activeDayHeadingId}
+      >
+        <div className="day-section__head">
+          <h2 className="day-section__title" id={activeDayHeadingId}>
+            {tabLabel(activeDay, zone)}
+          </h2>
+          <RatingCountsSummary
+            counts={activeDayRatingCounts}
+            className="day-section__rating-summary"
+          />
+        </div>
+      </section>
 
       {filtersOpen && (
         <section
-          id="filters-panel"
+          id={filtersPanelId}
           className="filters"
           aria-label="Sort and visibility"
         >
@@ -446,6 +529,7 @@ export default function App() {
           No shows match your filters for this day.
         </p>
       )}
+      </div>
 
       {selectedCount > 0 && (
         <div className="bulk-bar" role="region" aria-label="Bulk actions">

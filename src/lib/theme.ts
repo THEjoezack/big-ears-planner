@@ -1,10 +1,10 @@
 export type ThemePreference = "system" | "light" | "dark";
 
-const STORAGE_KEY = "big-ears-theme";
+export const THEME_STORAGE_KEY = "big-ears-theme";
 
 export function readThemePreference(): ThemePreference {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
+    const v = localStorage.getItem(THEME_STORAGE_KEY);
     if (v === "light" || v === "dark" || v === "system") return v;
   } catch {
     /* ignore */
@@ -14,7 +14,7 @@ export function readThemePreference(): ThemePreference {
 
 export function writeThemePreference(p: ThemePreference) {
   try {
-    localStorage.setItem(STORAGE_KEY, p);
+    localStorage.setItem(THEME_STORAGE_KEY, p);
   } catch {
     /* ignore quota */
   }

@@ -339,7 +339,9 @@ body {
   position: absolute;
   top: calc(100% + 0.35rem);
   right: 0;
-  min-width: 10.5rem;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(32rem, calc(100vh - 5rem));
+  overflow-y: auto;
   padding: 0.65rem 0.75rem 0.75rem;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -373,6 +375,70 @@ body {
 
 .theme-settings__option input {
   accent-color: var(--accent);
+}
+
+.theme-settings__backup {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.theme-settings__field-label {
+  display: block;
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.theme-settings__backup .theme-settings__field-label:not(:first-of-type) {
+  margin-top: 0.65rem;
+}
+
+.theme-settings__textarea {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+  min-height: 4.5rem;
+  box-sizing: border-box;
+}
+
+.theme-settings__textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.theme-settings__import-error {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--love);
+}
+
+.theme-settings__import-btn {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.theme-settings__import-btn:hover {
+  border-color: var(--muted);
 }
 
 .day-tabs {

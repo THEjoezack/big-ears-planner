@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
+import {
+  buildAppStateExportBase64,
+  importAppStateFromBackup,
+} from "@/lib/appStateBackup";
 import { useThemePreference } from "@/hooks/useThemePreference";
 import type { ThemePreference } from "@/lib/theme";
 
@@ -29,13 +33,29 @@ const OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-export function ThemeSettings() {
+type Props = { festivalId: string };
+
+export function ThemeSettings({ festivalId }: Props) {
   const { preference, setPreference } = useThemePreference();
   const [open, setOpen] = useState(false);
+  const [exportText, setExportText] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
   const panelId = useId();
+  const exportFieldId = useId();
+  const importFieldId = useId();
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    if (!open) return;
+    setExportText(buildAppStateExportBase64(festivalId));
+  }, [open, festivalId, preference]);
+
+  useEffect(() => {
+    if (open) setImportError(null);
+  }, [open, festivalId]);
 
   useEffect(() => {
     if (!open) return;
@@ -53,6 +73,23 @@ export function ThemeSettings() {
     };
   }, [open, close]);
 
+  const applyImport = useCallback(() => {
+    setImportError(null);
+    if (
+      !window.confirm(
+        "Replace saved ratings, hidden venues, active day, and theme on this device with the pasted backup?"
+      )
+    ) {
+      return;
+    }
+    const result = importAppStateFromBackup(importText, festivalId);
+    if (!result.ok) {
+      setImportError(result.error);
+      return;
+    }
+    window.location.reload();
+  }, [importText]);
+
   return (
     <div className="theme-settings" ref={wrapRef}>
       <button
@@ -64,14 +101,14 @@ export function ThemeSettings() {
         onClick={() => setOpen((o) => !o)}
       >
         <SettingsIcon />
-        <span className="theme-settings__sr">Appearance settings</span>
+        <span className="theme-settings__sr">Settings</span>
       </button>
       {open ? (
         <div
           id={panelId}
           className="theme-settings__panel"
           role="dialog"
-          aria-label="Appearance"
+          aria-label="Settings"
         >
           <p className="theme-settings__heading">Theme</p>
           <div className="theme-settings__options" role="radiogroup" aria-label="Color theme">
@@ -89,6 +126,50 @@ export function ThemeSettings() {
                 {label}
               </label>
             ))}
+          </div>
+
+          <div className="theme-settings__backup">
+            <p className="theme-settings__heading">Backup</p>
+            <label className="theme-settings__field-label" htmlFor={exportFieldId}>
+              Export (Base64 — copy this)
+            </label>
+            <textarea
+              id={exportFieldId}
+              className="theme-settings__textarea"
+              readOnly
+              rows={6}
+              value={exportText}
+              aria-readonly="true"
+              onFocus={(e) => e.target.select()}
+            />
+            <label className="theme-settings__field-label" htmlFor={importFieldId}>
+              Import (paste Base64 backup)
+            </label>
+            <textarea
+              id={importFieldId}
+              className="theme-settings__textarea"
+              rows={6}
+              value={importText}
+              onChange={(e) => {
+                setImportText(e.target.value);
+                setImportError(null);
+              }}
+              placeholder='Paste exported Base64, then click "Apply import".'
+              spellCheck={false}
+              autoComplete="off"
+            />
+            {importError ? (
+              <p className="theme-settings__import-error" role="alert">
+                {importError}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="theme-settings__import-btn"
+              onClick={applyImport}
+            >
+              Apply import
+            </button>
           </div>
         </div>
       ) : null}

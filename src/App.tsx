@@ -238,7 +238,7 @@ export default function App() {
   if (dayKeys.length === 0) {
     return (
       <>
-        <TopBarActions />
+        <TopBarActions festivalId={schedule.meta.festivalId} />
         <div className="app app--empty">
           <p>No shows in schedule.</p>
         </div>
@@ -269,7 +269,7 @@ export default function App() {
           </div>
           <div className="header__end">
             <div className="header__settings">
-              <ThemeSettings />
+              <ThemeSettings festivalId={schedule.meta.festivalId} />
             </div>
           </div>
         </div>

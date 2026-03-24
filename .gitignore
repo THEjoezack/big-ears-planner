@@ -1,0 +1,4 @@
+node_modules/
+dist/
+_sample-lineup.html
+.DS_Store

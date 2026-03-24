@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DateTime } from "luxon";
 
 import { useHiddenVenues } from "@/hooks/useHiddenVenues";
+import { usePersistedActiveDay } from "@/hooks/usePersistedActiveDay";
 import { useShowRatings, type ShowRating } from "@/hooks/useShowRatings";
 import {
   buildShowsByDay,
@@ -111,7 +112,10 @@ export default function App() {
   );
   const dayKeys = useMemo(() => sortedDayKeys(byDay), [byDay]);
 
-  const [activeDay, setActiveDay] = useState(() => dayKeys[0] ?? "");
+  const [activeDay, setActiveDay] = usePersistedActiveDay(
+    schedule.meta.festivalId,
+    dayKeys
+  );
   const [sortMode, setSortMode] = useState<SortMode>("time");
   const [visibility, setVisibility] = useState<Visibility>({
     love: true,
@@ -242,8 +246,8 @@ export default function App() {
               </select>
             </label>
             <p className="filters__hint">
-              Favorites first orders: love → like → not set → skip (then by time
-              within each group).
+              Favorites first orders: ❤️ → 👀 → ? → × (then by time within each
+              group).
             </p>
           </div>
           <fieldset className="filters__fieldset">
@@ -251,27 +255,53 @@ export default function App() {
             <div className="filters__checks">
               {(
                 [
-                  ["love", "Love"],
-                  ["like", "Like"],
-                  ["unset", "Not set"],
-                  ["skip", "Skip"],
+                  ["love", "Show love ratings"],
+                  ["like", "Show like ratings"],
+                  ["unset", "Show unrated performances"],
+                  ["skip", "Show skip ratings"],
                 ] as const
-              ).map(([key, label]) => (
-                <label key={key} className="filters__check">
+              ).map(([key, ariaLabel]) => (
+                <label
+                  key={key}
+                  className="filters__check filters__check--rating-symbol"
+                >
                   <input
                     type="checkbox"
                     checked={visibility[key]}
                     onChange={(e) =>
                       setVisibility((v) => ({ ...v, [key]: e.target.checked }))
                     }
+                    aria-label={ariaLabel}
                   />
-                  {label}
+                  {key === "love" ? (
+                    <span className="filters__rating-emoji" aria-hidden>
+                      ❤️
+                    </span>
+                  ) : key === "like" ? (
+                    <span className="filters__rating-emoji" aria-hidden>
+                      👀
+                    </span>
+                  ) : key === "unset" ? (
+                    <span
+                      className="filters__rating-emoji filters__rating-emoji--unset"
+                      aria-hidden
+                    >
+                      ?
+                    </span>
+                  ) : (
+                    <span
+                      className="filters__rating-emoji filters__rating-emoji--skip"
+                      aria-hidden
+                    >
+                      ×
+                    </span>
+                  )}
                 </label>
               ))}
             </div>
             <p className="filters__hint filters__hint--tight">
-              Uncheck <strong>Skip</strong> to hide acts you marked skip. Combine
-              with <strong>Favorites first</strong> to keep love/like near the top.
+              Uncheck <strong>×</strong> to hide acts you marked skip. Combine with{" "}
+              <strong>Favorites first</strong> to keep ❤️ / 👀 near the top.
             </p>
           </fieldset>
           <fieldset className="filters__fieldset filters__fieldset--venues">
@@ -318,7 +348,11 @@ export default function App() {
           return (
             <li
               key={show.id}
-              className={`show-card${isSelected ? " is-selected" : ""}`}
+              className={`show-card${isSelected ? " is-selected" : ""}${
+                r === "love" || r === "like" || r === "skip"
+                  ? ` show-card--${r}`
+                  : ""
+              }`}
             >
               <div className="show-card__pick">
                 <input
@@ -375,11 +409,24 @@ export default function App() {
                     className={`rate-btn rate-btn--${value}${
                       r === value ? " is-active" : ""
                     }`}
+                    aria-label={label}
                     onClick={() =>
                       setRating(show.id, r === value ? "unset" : value)
                     }
                   >
-                    {label}
+                    {value === "skip" ? (
+                      <span className="rate-btn__icon rate-btn__icon--skip" aria-hidden>
+                        ×
+                      </span>
+                    ) : value === "like" ? (
+                      <span className="rate-btn__icon" aria-hidden>
+                        👀
+                      </span>
+                    ) : (
+                      <span className="rate-btn__icon" aria-hidden>
+                        ❤️
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -420,23 +467,35 @@ export default function App() {
             <button
               type="button"
               className="bulk-bar__btn bulk-bar__btn--love"
+              aria-label="Love — apply to selected"
               onClick={() => applyBulkRating("love")}
             >
-              Love
+              <span className="rate-btn__icon" aria-hidden>
+                ❤️
+              </span>
             </button>
             <button
               type="button"
               className="bulk-bar__btn bulk-bar__btn--like"
+              aria-label="Like — apply to selected"
               onClick={() => applyBulkRating("like")}
             >
-              Like
+              <span className="rate-btn__icon" aria-hidden>
+                👀
+              </span>
             </button>
             <button
               type="button"
               className="bulk-bar__btn bulk-bar__btn--skip"
+              aria-label="Skip — apply to selected"
               onClick={() => applyBulkRating("skip")}
             >
-              Skip
+              <span
+                className="rate-btn__icon rate-btn__icon--skip"
+                aria-hidden
+              >
+                ×
+              </span>
             </button>
             <button
               type="button"

@@ -176,6 +176,31 @@ body {
   cursor: pointer;
 }
 
+.filters__check--rating-symbol {
+  min-width: 2.5rem;
+}
+
+.filters__rating-emoji {
+  font-size: 1.1rem;
+  line-height: 1;
+  user-select: none;
+}
+
+.filters__rating-emoji--skip {
+  color: var(--skip);
+  font-weight: 700;
+  font-size: 1.2rem;
+  transform: translateY(-0.03em);
+}
+
+.filters__rating-emoji--unset {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 1.15rem;
+  font-family: system-ui, sans-serif;
+  transform: translateY(-0.02em);
+}
+
 .filters__hint {
   margin: 0.5rem 0 0;
   color: var(--muted);
@@ -244,6 +269,24 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.show-card--love {
+  background: color-mix(in srgb, var(--love) 22%, var(--surface));
+  border-color: color-mix(in srgb, var(--love) 45%, var(--border));
+}
+
+.show-card--like {
+  background: color-mix(in srgb, var(--like) 22%, var(--surface));
+  border-color: color-mix(in srgb, var(--like) 45%, var(--border));
+}
+
+.show-card--skip {
+  background: color-mix(in srgb, var(--skip) 24%, var(--surface));
+  border-color: color-mix(in srgb, var(--skip) 50%, var(--border));
 }
 
 .show-card.is-selected {
@@ -375,14 +418,32 @@ body {
 }
 
 .rate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
   font-family: system-ui, sans-serif;
   font-size: 0.72rem;
-  padding: 0.35rem 0.55rem;
+  min-width: 2.15rem;
+  min-height: 2.05rem;
+  padding: 0.35rem 0.45rem;
   border-radius: 5px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
   cursor: pointer;
+}
+
+.rate-btn__icon {
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.rate-btn__icon--skip {
+  color: var(--skip);
+  font-weight: 700;
+  font-size: 1.05em;
+  transform: translateY(-0.04em);
 }
 
 .rate-btn--skip.is-active {
@@ -453,8 +514,14 @@ body {
 }
 
 .bulk-bar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
   font-size: 0.78rem;
-  padding: 0.35rem 0.55rem;
+  min-width: 2.25rem;
+  min-height: 2.1rem;
+  padding: 0.35rem 0.45rem;
   border-radius: 5px;
   border: 1px solid var(--border);
   background: var(--bg);

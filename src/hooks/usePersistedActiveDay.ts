@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 
-function storageKey(festivalId: string) {
-  return `${festivalId}-activeDay`;
+import { profileActiveDayKey } from "@/lib/profiles";
+
+function storageKey(festivalId: string, profileId: string) {
+  return profileActiveDayKey(festivalId, profileId);
 }
 
-function readStoredDay(festivalId: string, dayKeys: string[]): string {
+function readStoredDay(
+  festivalId: string,
+  profileId: string,
+  dayKeys: string[]
+): string {
   if (dayKeys.length === 0) return "";
   try {
-    const raw = localStorage.getItem(storageKey(festivalId));
+    const raw = localStorage.getItem(storageKey(festivalId, profileId));
     if (raw && dayKeys.includes(raw)) return raw;
   } catch {
     /* ignore */
@@ -15,10 +21,23 @@ function readStoredDay(festivalId: string, dayKeys: string[]): string {
   return dayKeys[0]!;
 }
 
-export function usePersistedActiveDay(festivalId: string, dayKeys: string[]) {
+export function usePersistedActiveDay(
+  festivalId: string,
+  dayKeys: string[],
+  profileId: string
+) {
   const [activeDay, setActiveDayState] = useState(() =>
-    readStoredDay(festivalId, dayKeys)
+    readStoredDay(festivalId, profileId, dayKeys)
   );
+
+  useEffect(() => {
+    if (dayKeys.length === 0) {
+      setActiveDayState("");
+      return;
+    }
+    const stored = readStoredDay(festivalId, profileId, dayKeys);
+    setActiveDayState(stored);
+  }, [festivalId, profileId, dayKeys]);
 
   useEffect(() => {
     if (dayKeys.length === 0) {
@@ -29,23 +48,23 @@ export function usePersistedActiveDay(festivalId: string, dayKeys: string[]) {
       const fallback = dayKeys[0]!;
       setActiveDayState(fallback);
       try {
-        localStorage.setItem(storageKey(festivalId), fallback);
+        localStorage.setItem(storageKey(festivalId, profileId), fallback);
       } catch {
         /* ignore quota */
       }
     }
-  }, [activeDay, dayKeys, festivalId]);
+  }, [activeDay, dayKeys, festivalId, profileId]);
 
   const setActiveDay = useCallback(
     (next: string) => {
       setActiveDayState(next);
       try {
-        localStorage.setItem(storageKey(festivalId), next);
+        localStorage.setItem(storageKey(festivalId, profileId), next);
       } catch {
         /* ignore quota */
       }
     },
-    [festivalId]
+    [festivalId, profileId]
   );
 
   return [activeDay, setActiveDay] as const;

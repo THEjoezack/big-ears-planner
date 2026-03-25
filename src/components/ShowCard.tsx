@@ -5,6 +5,11 @@ import type { ShowRating } from "@/hooks/useShowRatings";
 import { formatShowRange } from "@/lib/scheduleByDay";
 import type { Show } from "@/types/schedule";
 
+export type FriendRatingLine = {
+  label: string;
+  rating: Exclude<ShowRating, "unset">;
+};
+
 type Props = {
   show: Show;
   effectiveStart: DateTime;
@@ -15,7 +20,21 @@ type Props = {
   onToggleSelect: () => void;
   /** When false, hides bulk-selection checkbox (e.g. on Search tab). */
   showPick?: boolean;
+  friendLines?: FriendRatingLine[];
 };
+
+function friendRatingSymbol(rating: FriendRatingLine["rating"]) {
+  switch (rating) {
+    case "love":
+      return "❤️";
+    case "like":
+      return "👀";
+    case "skip":
+      return "×";
+    default:
+      return "";
+  }
+}
 
 export function ShowCard({
   show,
@@ -26,6 +45,7 @@ export function ShowCard({
   selected,
   onToggleSelect,
   showPick = true,
+  friendLines = [],
 }: Props) {
   return (
     <li
@@ -81,42 +101,62 @@ export function ShowCard({
           </details>
         ) : null}
       </div>
-      <div
-        className="show-card__rate"
-        role="group"
-        aria-label={`Rate ${show.title}`}
-      >
-        {(
-          [
-            ["skip", "Skip"],
-            ["like", "Like"],
-            ["love", "Love"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            className={`rate-btn rate-btn--${value}${
-              r === value ? " is-active" : ""
-            }`}
-            aria-label={label}
-            onClick={() => onRate(r === value ? "unset" : value)}
-          >
-            {value === "skip" ? (
-              <span className="rate-btn__icon rate-btn__icon--skip" aria-hidden>
-                ×
-              </span>
-            ) : value === "like" ? (
-              <span className="rate-btn__icon" aria-hidden>
-                👀
-              </span>
-            ) : (
-              <span className="rate-btn__icon" aria-hidden>
-                ❤️
-              </span>
-            )}
-          </button>
-        ))}
+      <div className="show-card__rate-wrap">
+        <div
+          className="show-card__rate"
+          role="group"
+          aria-label={`Rate ${show.title}`}
+        >
+          {(
+            [
+              ["skip", "Skip"],
+              ["like", "Like"],
+              ["love", "Love"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`rate-btn rate-btn--${value}${
+                r === value ? " is-active" : ""
+              }`}
+              aria-label={label}
+              onClick={() => onRate(r === value ? "unset" : value)}
+            >
+              {value === "skip" ? (
+                <span className="rate-btn__icon rate-btn__icon--skip" aria-hidden>
+                  ×
+                </span>
+              ) : value === "like" ? (
+                <span className="rate-btn__icon" aria-hidden>
+                  👀
+                </span>
+              ) : (
+                <span className="rate-btn__icon" aria-hidden>
+                  ❤️
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        {friendLines.length > 0 ? (
+          <ul className="show-card__friends" aria-label="Friends’ ratings">
+            {friendLines.map((line, i) => (
+              <li
+                key={`${line.label}-${line.rating}-${i}`}
+                className={`show-card__friend show-card__friend--${line.rating}`}
+              >
+                <span className="show-card__friend-name">{line.label}</span>{" "}
+                <span
+                  className={`show-card__friend-r show-card__friend-r--${line.rating}`}
+                  aria-hidden
+                >
+                  {friendRatingSymbol(line.rating)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </li>
   );

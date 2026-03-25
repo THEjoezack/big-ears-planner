@@ -113,9 +113,39 @@ body {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.search-view {
+.search-view,
+.faves-view {
   margin-bottom: 1.5rem;
   font-family: system-ui, sans-serif;
+}
+
+.faves-view__subhead {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.faves-view__day {
+  margin: 0 0 1.15rem;
+}
+
+.faves-view__day:last-of-type {
+  margin-bottom: 0;
+}
+
+.faves-view__day-heading {
+  margin: 0 0 0.55rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.faves-view__empty {
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
 }
 
 .search-view__label {
@@ -173,8 +203,14 @@ body {
   max-width: 100%;
 }
 
-.settings-page__brand .rating-summary {
+.settings-page__brand .rating-summary,
+.faves-view__brand .rating-summary {
   justify-content: center;
+}
+
+.faves-view__brand .header__rating-wrap {
+  width: 100%;
+  max-width: 100%;
 }
 
 .settings-page__backup {
@@ -453,6 +489,254 @@ body {
   border-color: var(--muted);
 }
 
+.settings-page__profile {
+  margin-top: 1.25rem;
+}
+
+.settings-page__share {
+  margin-top: 1.25rem;
+}
+
+.settings-page__share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.settings-page__danger {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.settings-page__danger-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.settings-page__danger-btn {
+  display: block;
+  width: 100%;
+  max-width: 20rem;
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.settings-page__danger-btn:hover {
+  border-color: var(--love);
+}
+
+.settings-page__danger-btn--secondary:hover {
+  border-color: var(--muted);
+}
+
+.settings-delete-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.settings-delete-confirm__delete-btn {
+  padding: 0.45rem 0.75rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  background: color-mix(in srgb, var(--love) 28%, var(--surface));
+  border: 1px solid var(--love);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.settings-delete-confirm__delete-btn:hover {
+  filter: brightness(1.08);
+}
+
+.settings-page__share-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.import-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.import-modal {
+  width: 100%;
+  max-width: 22rem;
+  max-height: min(90vh, 32rem);
+  overflow-y: auto;
+  padding: 1.1rem 1.15rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px color-mix(in srgb, #000 35%, transparent);
+  font-family: system-ui, sans-serif;
+}
+
+.import-modal__title {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.import-modal__warn {
+  margin: 0 0 0.65rem;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 6px;
+}
+
+.import-modal__error {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--love);
+}
+
+.import-modal__hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.import-modal__actions {
+  margin-bottom: 0.85rem;
+}
+
+.import-modal__block {
+  margin-bottom: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.import-modal__label {
+  display: block;
+  margin: 0 0 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.import-modal__select,
+.import-modal__input {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.45rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.import-modal__btn {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.import-modal__btn--secondary {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.import-modal__btn:hover {
+  filter: brightness(1.06);
+}
+
+.import-modal__footer {
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.import-modal__linkish {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.82rem;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.import-flash-error {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: min(36rem, calc(100vw - 2rem));
+  padding: 0.55rem 0.75rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--love);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px color-mix(in srgb, #000 25%, transparent);
+}
+
+.import-flash-error__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.import-flash-error__dismiss {
+  flex-shrink: 0;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
 .day-tabs {
   display: flex;
   flex-wrap: nowrap;
@@ -703,7 +987,7 @@ body {
     min-width: 0;
   }
 
-  .show-card__rate {
+  .show-card__rate-wrap {
     grid-column: 1 / -1;
     grid-row: 3;
   }
@@ -723,7 +1007,7 @@ body {
     grid-row: 2;
   }
 
-  .show-card--no-pick .show-card__rate {
+  .show-card--no-pick .show-card__rate-wrap {
     grid-column: 1;
     grid-row: 3;
   }
@@ -830,6 +1114,14 @@ body {
   margin-top: 0.55rem;
 }
 
+.show-card__rate-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
 .show-card__rate {
   display: flex;
   flex-wrap: wrap;
@@ -837,9 +1129,47 @@ body {
   justify-content: flex-end;
 }
 
+.show-card__friends {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--muted);
+  text-align: right;
+  max-width: 100%;
+}
+
+.show-card__friend {
+  margin: 0;
+}
+
+.show-card__friend-name {
+  font-weight: 500;
+  color: color-mix(in srgb, var(--muted) 88%, var(--text));
+}
+
+.show-card__friend-r {
+  font-size: 0.85em;
+}
+
+.show-card__friend-r--skip {
+  font-weight: 700;
+  color: var(--skip);
+}
+
 @media (max-width: 520px) {
+  .show-card__rate-wrap {
+    align-items: flex-start;
+  }
+
   .show-card__rate {
     justify-content: flex-start;
+  }
+
+  .show-card__friends {
+    text-align: left;
   }
 }
 
@@ -875,16 +1205,19 @@ body {
 .rate-btn--skip.is-active {
   background: color-mix(in srgb, var(--skip) 35%, transparent);
   border-color: var(--skip);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--skip) 55%, transparent);
 }
 
 .rate-btn--like.is-active {
   background: color-mix(in srgb, var(--like) 35%, transparent);
   border-color: var(--like);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--like) 55%, transparent);
 }
 
 .rate-btn--love.is-active {
   background: color-mix(in srgb, var(--love) 35%, transparent);
   border-color: var(--love);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--love) 55%, transparent);
 }
 
 .empty-day {

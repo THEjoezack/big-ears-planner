@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
+import { useProfileContext } from "@/context/ProfileContext";
 import {
   buildAppStateExportBase64,
   importAppStateFromBackup,
 } from "@/lib/appStateBackup";
-import { RatingCountsSummary } from "@/components/RatingCountsSummary";
+import {
+  clearActiveProfileDataAndTheme,
+  DEFAULT_PROFILE_ID,
+  deleteAllFriendProfiles,
+  readProfileRegistry,
+} from "@/lib/profiles";
+import {
+  encodeShareImportToken,
+  SHARE_URL_WARN_LENGTH,
+} from "@/lib/shareImportCodec";
+import { applyThemePreference, readThemePreference } from "@/lib/theme";
 import { useThemePreference } from "@/hooks/useThemePreference";
 import type { ThemePreference } from "@/lib/theme";
-
-type RatingCounts = {
-  love: number;
-  like: number;
-  skip: number;
-  unset: number;
-};
 
 const OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
@@ -21,58 +25,133 @@ const OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-type Props = {
-  festivalId: string;
-  scheduleTitle: string;
-  ratingCounts: RatingCounts;
-};
+type Props = { festivalId: string };
 
-/** Full-page settings: title, counts, theme, and backup. */
-export function SettingsPanel({
-  festivalId,
-  scheduleTitle,
-  ratingCounts,
-}: Props) {
+/** Full-page settings: theme, profile, share, backup, and data deletion. */
+export function SettingsPanel({ festivalId }: Props) {
+  const {
+    profiles,
+    activeProfileId,
+    setActiveProfileId,
+    refreshProfiles,
+  } = useProfileContext();
   const { preference, setPreference } = useThemePreference();
   const [exportText, setExportText] = useState("");
   const [importText, setImportText] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
+  const [shareHint, setShareHint] = useState<string | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<null | "friends" | "mine">(
+    null
+  );
   const exportFieldId = useId();
   const importFieldId = useId();
+  const profileSelectId = useId();
 
   useEffect(() => {
-    setExportText(buildAppStateExportBase64(festivalId));
-  }, [festivalId, preference]);
+    setExportText(buildAppStateExportBase64(festivalId, activeProfileId));
+  }, [festivalId, activeProfileId, preference]);
 
   const applyImport = useCallback(() => {
     setImportError(null);
     if (
       !window.confirm(
-        "Replace saved ratings, hidden venues, active day, and theme on this device with the pasted backup?"
+        "Replace saved ratings, hidden venues, active day, and theme for your current profile on this device with the pasted backup?"
       )
     ) {
       return;
     }
-    const result = importAppStateFromBackup(importText, festivalId);
+    const result = importAppStateFromBackup(
+      importText,
+      festivalId,
+      activeProfileId
+    );
     if (!result.ok) {
       setImportError(result.error);
       return;
     }
     window.location.reload();
-  }, [importText, festivalId]);
+  }, [importText, festivalId, activeProfileId]);
+
+  const shareOrCopy = useCallback(async () => {
+    setShareHint(null);
+    const { token, length } = encodeShareImportToken(festivalId, activeProfileId);
+    const url = `${window.location.origin}${window.location.pathname}#import=${token}`;
+
+    if (length > SHARE_URL_WARN_LENGTH) {
+      setShareHint(
+        "This link is very long; some apps or browsers may not handle it. If sharing fails, use Export (Base64) instead."
+      );
+    }
+
+    try {
+      if (navigator.share) {
+        const shareData = { url, title: "Big Ears schedule share", text: "Shared festival planner data" };
+        if (!navigator.canShare || navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      setShareHint("Share was cancelled or failed. Use Copy link.");
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareHint("Link copied to clipboard.");
+    } catch {
+      setShareHint("Could not copy automatically. Select and copy the link from the box below.");
+    }
+  }, [festivalId, activeProfileId]);
+
+  const copyShareUrlField = useCallback(() => {
+    const { token } = encodeShareImportToken(festivalId, activeProfileId);
+    const url = `${window.location.origin}${window.location.pathname}#import=${token}`;
+    void navigator.clipboard.writeText(url).then(
+      () => setShareHint("Link copied to clipboard."),
+      () => setShareHint("Could not copy to clipboard.")
+    );
+  }, [festivalId, activeProfileId]);
+
+  const friendDeleteCount = readProfileRegistry(festivalId).filter(
+    (p) => p.id !== DEFAULT_PROFILE_ID
+  ).length;
+
+  const requestDeleteFriends = useCallback(() => {
+    const list = readProfileRegistry(festivalId);
+    const n = list.filter((p) => p.id !== DEFAULT_PROFILE_ID).length;
+    if (n === 0) {
+      window.alert("There are no friend profiles to remove.");
+      return;
+    }
+    setDeleteDialog("friends");
+  }, [festivalId]);
+
+  const confirmDeleteFriends = useCallback(() => {
+    setDeleteDialog(null);
+    deleteAllFriendProfiles(festivalId);
+    refreshProfiles();
+    window.location.reload();
+  }, [festivalId, refreshProfiles]);
+
+  const requestDeleteMine = useCallback(() => {
+    setDeleteDialog("mine");
+  }, []);
+
+  const confirmDeleteMine = useCallback(() => {
+    setDeleteDialog(null);
+    clearActiveProfileDataAndTheme(festivalId, activeProfileId);
+    applyThemePreference(readThemePreference());
+    window.location.reload();
+  }, [festivalId, activeProfileId]);
+
+  const shareUrlDisplay = (() => {
+    const { token } = encodeShareImportToken(festivalId, activeProfileId);
+    return `${window.location.origin}${window.location.pathname}#import=${token}`;
+  })();
 
   return (
     <section className="settings-page" aria-label="Settings">
-      <div className="settings-page__brand">
-        <h1 className="header__title">{scheduleTitle}</h1>
-        <div className="header__rating-wrap" aria-hidden="true">
-          <RatingCountsSummary
-            counts={ratingCounts}
-            className="header__rating-summary"
-          />
-        </div>
-      </div>
-
       <p className="theme-settings__heading">Theme</p>
       <div className="theme-settings__options" role="radiogroup" aria-label="Color theme">
         {OPTIONS.map(({ value, label }) => (
@@ -87,6 +166,70 @@ export function SettingsPanel({
             {label}
           </label>
         ))}
+      </div>
+
+      <div className="settings-page__profile">
+        <p className="theme-settings__heading">Editing as</p>
+        <label className="theme-settings__field-label" htmlFor={profileSelectId}>
+          Active profile
+        </label>
+        <select
+          id={profileSelectId}
+          className="import-modal__select"
+          value={activeProfileId}
+          onChange={(e) => setActiveProfileId(e.target.value)}
+        >
+          {profiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <p className="settings-page__share-hint">
+          Ratings and venue filters you change apply to this profile. Other
+          profiles appear as read-only lines on each act.
+        </p>
+      </div>
+
+      <div className="settings-page__share">
+        <p className="theme-settings__heading">Share link</p>
+        <p className="settings-page__share-hint">
+          Creates a link with this profile’s data (and theme). Opening it on
+          another device shows import options.
+        </p>
+        <div className="settings-page__share-actions">
+          <button
+            type="button"
+            className="theme-settings__import-btn"
+            onClick={() => void shareOrCopy()}
+          >
+            Share…
+          </button>
+          <button
+            type="button"
+            className="theme-settings__import-btn"
+            onClick={copyShareUrlField}
+          >
+            Copy link
+          </button>
+        </div>
+        {shareHint ? (
+          <p className="settings-page__share-hint" role="status">
+            {shareHint}
+          </p>
+        ) : null}
+        <label className="theme-settings__field-label" htmlFor="share-url-ro">
+          Current share URL (read-only)
+        </label>
+        <textarea
+          id="share-url-ro"
+          className="theme-settings__textarea"
+          readOnly
+          rows={3}
+          value={shareUrlDisplay}
+          aria-readonly="true"
+          onFocus={(e) => e.target.select()}
+        />
       </div>
 
       <div className="settings-page__backup">
@@ -132,6 +275,81 @@ export function SettingsPanel({
           Apply import
         </button>
       </div>
+
+      <div className="settings-page__danger">
+        <p className="theme-settings__heading">Data</p>
+        <p className="settings-page__danger-note">
+          These actions require confirmation. They only affect this browser.
+        </p>
+        <button
+          type="button"
+          className="settings-page__danger-btn settings-page__danger-btn--secondary"
+          onClick={requestDeleteFriends}
+        >
+          Delete all friends’ data
+        </button>
+        <button
+          type="button"
+          className="settings-page__danger-btn"
+          onClick={requestDeleteMine}
+        >
+          Delete my schedule data
+        </button>
+      </div>
+
+      {deleteDialog ? (
+        <div className="import-modal-overlay" role="presentation">
+          <div
+            className="import-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            aria-describedby="delete-confirm-desc"
+          >
+            <h2 id="delete-confirm-title" className="import-modal__title">
+              {deleteDialog === "friends"
+                ? "Delete all friends’ data?"
+                : "Delete your schedule data?"}
+            </h2>
+            <p id="delete-confirm-desc" className="import-modal__hint">
+              {deleteDialog === "friends" ? (
+                <>
+                  <strong>{friendDeleteCount} friend profile(s)</strong> will be
+                  removed and their saved ratings and filters for this festival
+                  deleted. Your own profile is unchanged.
+                </>
+              ) : (
+                <>
+                  This removes your current profile’s ratings, hidden venues,
+                  and active day for this festival, and resets{" "}
+                  <strong>theme</strong> to the system default. Friend profiles
+                  are not removed.
+                </>
+              )}
+            </p>
+            <div className="settings-delete-confirm__actions">
+              <button
+                type="button"
+                className="import-modal__btn import-modal__btn--secondary"
+                onClick={() => setDeleteDialog(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="settings-delete-confirm__delete-btn"
+                onClick={
+                  deleteDialog === "friends"
+                    ? confirmDeleteFriends
+                    : confirmDeleteMine
+                }
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

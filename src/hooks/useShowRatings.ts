@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { profileShowRatingsKey } from "@/lib/profiles";
+
 export type ShowRating = "unset" | "like" | "love" | "skip";
 
 const LEGACY: Record<string, ShowRating> = {
@@ -12,16 +14,16 @@ function normalizeRating(v: string | undefined): ShowRating {
   return "unset";
 }
 
-function storageKey(festivalId: string) {
-  return `${festivalId}-showRatings`;
+function storageKey(festivalId: string, profileId: string) {
+  return profileShowRatingsKey(festivalId, profileId);
 }
 
-export function useShowRatings(festivalId: string) {
+export function useShowRatings(festivalId: string, profileId: string) {
   const [ratings, setRatings] = useState<Record<string, ShowRating>>({});
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(storageKey(festivalId));
+      const raw = localStorage.getItem(storageKey(festivalId, profileId));
       if (!raw) {
         setRatings({});
         return;
@@ -35,7 +37,7 @@ export function useShowRatings(festivalId: string) {
     } catch {
       setRatings({});
     }
-  }, [festivalId]);
+  }, [festivalId, profileId]);
 
   const setRating = useCallback(
     (showId: string, rating: ShowRating) => {
@@ -47,14 +49,17 @@ export function useShowRatings(festivalId: string) {
           next[showId] = rating;
         }
         try {
-          localStorage.setItem(storageKey(festivalId), JSON.stringify(next));
+          localStorage.setItem(
+            storageKey(festivalId, profileId),
+            JSON.stringify(next)
+          );
         } catch {
           /* ignore quota */
         }
         return next;
       });
     },
-    [festivalId]
+    [festivalId, profileId]
   );
 
   const getRating = useCallback(
@@ -76,14 +81,17 @@ export function useShowRatings(festivalId: string) {
           }
         }
         try {
-          localStorage.setItem(storageKey(festivalId), JSON.stringify(next));
+          localStorage.setItem(
+            storageKey(festivalId, profileId),
+            JSON.stringify(next)
+          );
         } catch {
           /* ignore quota */
         }
         return next;
       });
     },
-    [festivalId]
+    [festivalId, profileId]
   );
 
   return { ratings, setRating, setRatingBulk, getRating };

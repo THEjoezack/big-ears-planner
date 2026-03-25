@@ -1,18 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 
-function storageKey(festivalId: string) {
-  return `${festivalId}-hiddenVenues`;
+import { profileHiddenVenuesKey } from "@/lib/profiles";
+
+function storageKey(festivalId: string, profileId: string) {
+  return profileHiddenVenuesKey(festivalId, profileId);
 }
 
 /** Venue IDs to exclude from the schedule list. */
-export function useHiddenVenues(festivalId: string, validVenueIds: string[]) {
+export function useHiddenVenues(
+  festivalId: string,
+  validVenueIds: string[],
+  profileId: string
+) {
   const valid = new Set(validVenueIds);
 
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(storageKey(festivalId));
+      const raw = localStorage.getItem(storageKey(festivalId, profileId));
       if (!raw) {
         setHidden(new Set());
         return;
@@ -30,20 +36,20 @@ export function useHiddenVenues(festivalId: string, validVenueIds: string[]) {
     } catch {
       setHidden(new Set());
     }
-  }, [festivalId, validVenueIds]);
+  }, [festivalId, profileId, validVenueIds]);
 
   const persist = useCallback(
     (next: Set<string>) => {
       try {
         localStorage.setItem(
-          storageKey(festivalId),
+          storageKey(festivalId, profileId),
           JSON.stringify([...next])
         );
       } catch {
         /* quota */
       }
     },
-    [festivalId]
+    [festivalId, profileId]
   );
 
   const toggleHidden = useCallback(

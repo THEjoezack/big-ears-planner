@@ -9,9 +9,18 @@ import {
 } from "react";
 import { DateTime } from "luxon";
 
+import { ImportChooserModal } from "@/components/ImportChooserModal";
+import { ProfileProvider, useProfileContext } from "@/context/ProfileContext";
+import { useFriendRatingsMaps } from "@/hooks/useFriendRatingsMaps";
 import { useHiddenVenues } from "@/hooks/useHiddenVenues";
 import { usePersistedActiveDay } from "@/hooks/usePersistedActiveDay";
 import { useShowRatings, type ShowRating } from "@/hooks/useShowRatings";
+import {
+  decodeShareImportTokenToBase64,
+  readImportHashFromLocation,
+  stripImportHashFromUrl,
+} from "@/lib/shareImportCodec";
+import { parseAppStateFromBase64, type AppStateExport } from "@/lib/appStateBackup";
 import {
   buildShowsByDay,
   sortedDayKeys,
@@ -29,7 +38,7 @@ import scheduleJson from "../data/schedule.json";
 
 const schedule = scheduleJson as ScheduleDoc;
 
-type MainView = "schedule" | "search" | "settings";
+type MainView = "schedule" | "search" | "faves" | "settings";
 
 type SortMode = "time" | "favorites";
 
@@ -103,10 +112,14 @@ function countRatingsForDay(
   return counts;
 }
 
-export default function App() {
+function AppInner() {
   const zone = schedule.meta.timezone;
   const festivalId = schedule.meta.festivalId;
-  const { getRating, setRating, setRatingBulk } = useShowRatings(festivalId);
+  const { activeProfileId, profiles } = useProfileContext();
+  const { getRating, setRating, setRatingBulk } = useShowRatings(
+    festivalId,
+    activeProfileId
+  );
 
   const showById = useMemo(() => {
     const m = new Map<string, (typeof schedule.shows)[0]>();
@@ -125,14 +138,66 @@ export default function App() {
     [venuesSorted]
   );
   const { hidden, toggleHidden, toggleAllVenues, hideVenuesBulk, isHidden } =
-    useHiddenVenues(festivalId, venueIdsList);
+    useHiddenVenues(festivalId, venueIdsList, activeProfileId);
 
   const allVenuesSelected = hidden.size === 0;
 
   const byDay = useMemo(() => buildShowsByDay(schedule.shows, zone), [zone]);
   const dayKeys = useMemo(() => sortedDayKeys(byDay), [byDay]);
 
-  const [activeDay, setActiveDay] = usePersistedActiveDay(festivalId, dayKeys);
+  const [activeDay, setActiveDay] = usePersistedActiveDay(
+    festivalId,
+    dayKeys,
+    activeProfileId
+  );
+
+  const friendRatingsMaps = useFriendRatingsMaps(
+    festivalId,
+    activeProfileId,
+    profiles
+  );
+
+  const friendLinesByShowId = useMemo(() => {
+    const byShow: Record<
+      string,
+      { label: string; rating: Exclude<ShowRating, "unset"> }[]
+    > = {};
+    for (const fp of profiles) {
+      if (fp.id === activeProfileId) continue;
+      const map = friendRatingsMaps[fp.id] ?? {};
+      for (const [showId, rating] of Object.entries(map)) {
+        if (rating === "unset") continue;
+        const list = byShow[showId];
+        const row = { label: fp.label, rating };
+        if (list) list.push(row);
+        else byShow[showId] = [row];
+      }
+    }
+    return byShow;
+  }, [profiles, activeProfileId, friendRatingsMaps]);
+
+  const [shareImportPayload, setShareImportPayload] =
+    useState<AppStateExport | null>(null);
+  const [shareImportError, setShareImportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = readImportHashFromLocation();
+    if (!token) return;
+    const dec = decodeShareImportTokenToBase64(token);
+    if (!dec.ok) {
+      setShareImportError(dec.error);
+      stripImportHashFromUrl();
+      return;
+    }
+    const parsed = parseAppStateFromBase64(dec.base64);
+    if (!parsed.ok) {
+      setShareImportError(parsed.error);
+      stripImportHashFromUrl();
+      return;
+    }
+    stripImportHashFromUrl();
+    setShareImportPayload(parsed.payload);
+  }, []);
   const [sortMode, setSortMode] = useState<SortMode>("time");
   const [visibility, setVisibility] = useState<Visibility>({
     love: true,
@@ -207,6 +272,37 @@ export default function App() {
         );
       });
   }, [searchQuery]);
+
+  const favesShows = useMemo(() => {
+    return schedule.shows
+      .filter((s) => {
+        if (isHidden(s.venueId)) return false;
+        const r = getRating(s.id);
+        return r === "love" || r === "like";
+      })
+      .sort((a, b) => {
+        const ma = DateTime.fromISO(a.start).toMillis();
+        const mb = DateTime.fromISO(b.start).toMillis();
+        if (ma !== mb) return ma - mb;
+        return a.title.localeCompare(b.title);
+      });
+  }, [getRating, isHidden]);
+
+  const favesByDay = useMemo(() => {
+    type S = (typeof schedule.shows)[number];
+    const map = new Map<string, S[]>();
+    for (const show of favesShows) {
+      const dayKey = DateTime.fromISO(show.start, { zone })
+        .startOf("day")
+        .toISODate();
+      if (!dayKey) continue;
+      const list = map.get(dayKey);
+      if (list) list.push(show);
+      else map.set(dayKey, [show]);
+    }
+    const keys = [...map.keys()].sort((a, b) => a.localeCompare(b));
+    return keys.map((dayKey) => ({ dayKey, shows: map.get(dayKey)! }));
+  }, [favesShows, zone]);
 
   const selectedCount = selectedIds.size;
 
@@ -290,6 +386,15 @@ export default function App() {
           <button
             type="button"
             role="tab"
+            aria-selected={mainView === "faves"}
+            className={`app-main-tabs__btn${mainView === "faves" ? " is-active" : ""}`}
+            onClick={() => setMainView("faves")}
+          >
+            Faves
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={mainView === "settings"}
             className={`app-main-tabs__btn${mainView === "settings" ? " is-active" : ""}`}
             onClick={() => setMainView("settings")}
@@ -297,16 +402,6 @@ export default function App() {
             Settings
           </button>
         </nav>
-
-        {mainView === "search" ? (
-          <header className="header">
-            <div className="header__top header__top--solo">
-              <div className="header__brand header__brand--solo">
-                <h1 className="header__title">{schedule.meta.name}</h1>
-              </div>
-            </div>
-          </header>
-        ) : null}
 
         {mainView === "schedule" && dayKeys.length > 0 ? (
           <>
@@ -489,6 +584,7 @@ export default function App() {
                     onRate={(next) => setRating(show.id, next)}
                     selected={selectedIds.has(show.id)}
                     onToggleSelect={() => toggleSelected(show.id)}
+                    friendLines={friendLinesByShowId[show.id] ?? []}
                   />
                 ))}
               </ul>
@@ -533,6 +629,7 @@ export default function App() {
                   selected={false}
                   onToggleSelect={() => {}}
                   showPick={false}
+                  friendLines={friendLinesByShowId[show.id] ?? []}
                 />
               ))}
             </ul>
@@ -547,12 +644,65 @@ export default function App() {
           </div>
         ) : null}
 
+        {mainView === "faves" ? (
+          <div
+            className="faves-view"
+            aria-describedby={
+              favesShows.length > 0 ? "faves-view-desc" : undefined
+            }
+          >
+            <div className="settings-page__brand faves-view__brand">
+              <h1 className="header__title">{`Big Ears ${schedule.meta.year}`}</h1>
+              <div className="header__rating-wrap" aria-hidden="true">
+                <RatingCountsSummary
+                  counts={festivalRatingCounts}
+                  className="header__rating-summary"
+                />
+              </div>
+            </div>
+            {favesShows.length > 0 ? (
+              <p className="faves-view__subhead" id="faves-view-desc">
+                ❤️ and 👀 acts by day, in date order (hidden venues omitted).
+              </p>
+            ) : null}
+            {favesByDay.map(({ dayKey, shows }) => (
+              <section
+                key={dayKey}
+                className="faves-view__day"
+                aria-labelledby={`faves-day-${dayKey}`}
+              >
+                <h2 className="faves-view__day-heading" id={`faves-day-${dayKey}`}>
+                  {tabLabel(dayKey, zone)}
+                </h2>
+                <ul className="show-list" role="list">
+                  {shows.map((show) => (
+                    <ShowCard
+                      key={show.id}
+                      show={show}
+                      effectiveStart={DateTime.fromISO(show.start, { zone })}
+                      zone={zone}
+                      rating={getRating(show.id)}
+                      onRate={(next) => setRating(show.id, next)}
+                      selected={false}
+                      onToggleSelect={() => {}}
+                      showPick={false}
+                      friendLines={friendLinesByShowId[show.id] ?? []}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))}
+            {favesShows.length === 0 ? (
+              <p className="faves-view__empty">
+                No loved or liked acts yet. Rate some shows on the schedule or
+                search tab.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         {mainView === "settings" ? (
-          <SettingsPanel
-            festivalId={festivalId}
-            scheduleTitle={`Big Ears ${schedule.meta.year}`}
-            ratingCounts={festivalRatingCounts}
-          />
+          <SettingsPanel festivalId={festivalId} />
         ) : null}
 
         {selectedCount > 0 && mainView === "schedule" && dayKeys.length > 0 ? (
@@ -629,6 +779,34 @@ export default function App() {
           </div>
         ) : null}
       </div>
+
+      {shareImportPayload ? (
+        <ImportChooserModal
+          payload={shareImportPayload}
+          currentFestivalId={festivalId}
+          onDone={() => setShareImportPayload(null)}
+        />
+      ) : null}
+      {shareImportError ? (
+        <div className="import-flash-error" role="alert">
+          <span className="import-flash-error__text">{shareImportError}</span>
+          <button
+            type="button"
+            className="import-flash-error__dismiss"
+            onClick={() => setShareImportError(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <ProfileProvider festivalId={schedule.meta.festivalId}>
+      <AppInner />
+    </ProfileProvider>
   );
 }

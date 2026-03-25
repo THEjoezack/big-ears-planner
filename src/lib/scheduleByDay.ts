@@ -36,3 +36,12 @@ export function tabLabel(isoDate: string, zone: string): string {
   const d = DateTime.fromISO(isoDate, { zone });
   return d.toFormat("ccc LLL d");
 }
+
+export function formatShowRange(show: Show, zone: string): string {
+  const s = DateTime.fromISO(show.start, { zone });
+  const e = DateTime.fromISO(show.end, { zone });
+  if (s.toISODate() === e.toISODate()) {
+    return `${s.toFormat("h:mm a")} – ${e.toFormat("h:mm a")}`;
+  }
+  return `${s.toFormat("ccc LLL d, h:mm a")} – ${e.toFormat("ccc LLL d, h:mm a")}`;
+}

@@ -9,11 +9,19 @@ export interface ScheduleMeta {
   venueCount: number;
   /** Shows with non-empty description (when scraped with descriptions). */
   descriptionCount?: number;
+  /** Shows with at least one scraped link (when scraped with links). */
+  linkCount?: number;
 }
 
 export interface Venue {
   id: string;
   name: string;
+}
+
+/** YouTube, Spotify, social profiles, etc., from the event detail page. */
+export interface ShowLink {
+  url: string;
+  label: string;
 }
 
 export interface Show {
@@ -28,6 +36,8 @@ export interface Show {
   dateKind: "single_day" | "multi_day_range";
   /** Plain text from the official event page (optional if using older JSON). */
   description?: string;
+  /** Media embeds and social URLs scraped from the event page (optional). */
+  links?: ShowLink[];
   raw?: {
     dateLine: string;
     times: string[];

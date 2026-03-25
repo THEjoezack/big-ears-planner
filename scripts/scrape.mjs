@@ -7,7 +7,8 @@
  * - First + last date blocks + times: start = first day at start time, end = last day at end time.
  *
  * After the list pass, fetches each event detail page and fills `description` (plain text
- * from `.entry.entry--type-event .entry__content`, paragraphs joined with blank lines).
+ * from `.entry.entry--type-event .entry__content`, paragraphs joined with blank lines) and
+ * `links` (YouTube/Vimeo embeds, Spotify, Instagram, X/Twitter, Facebook artist pages, etc.).
  */
 
 import { writeFile, mkdir } from "node:fs/promises";
@@ -42,20 +43,158 @@ function absoluteDetailUrl(url) {
   return new URL(u, SITE_ORIGIN).href;
 }
 
-function extractDescription(html) {
+function decodeEntitiesInUrl(s) {
+  return String(s)
+    .replace(/&#038;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function defaultLinkLabel(url) {
+  const u = url.toLowerCase();
+  if (u.includes("youtube.com") || u.includes("youtu.be")) return "YouTube";
+  if (u.includes("vimeo.com")) return "Vimeo";
+  if (u.includes("instagram.com")) return "Instagram";
+  if (u.includes("twitter.com") || u.includes("x.com/")) return "X (Twitter)";
+  if (u.includes("facebook.com")) return "Facebook";
+  if (u.includes("spotify.com")) return "Spotify";
+  if (u.includes("soundcloud.com")) return "SoundCloud";
+  if (u.includes("bandcamp.com")) return "Bandcamp";
+  if (u.includes("tiktok.com")) return "TikTok";
+  if (u.includes("music.apple.com")) return "Apple Music";
+  return "Link";
+}
+
+function pickLinkLabel(url, anchorText) {
+  const t = anchorText.replace(/\s+/g, " ").trim();
+  if (
+    t.length >= 2 &&
+    t.length <= 72 &&
+    !/^(click|here|link|watch|listen|video)$/i.test(t)
+  ) {
+    return t;
+  }
+  return defaultLinkLabel(url);
+}
+
+/** Normalize embed/short URLs for deduplication and cleaner watch links. */
+function normalizeMediaUrl(href) {
+  const h = decodeEntitiesInUrl(href.trim());
+  const embedYt = h.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/i);
+  if (embedYt) return `https://www.youtube.com/watch?v=${embedYt[1]}`;
+  const shortYt = h.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/i);
+  if (shortYt) return `https://www.youtube.com/watch?v=${shortYt[1]}`;
+  const watchYt = h.match(/[?&]v=([a-zA-Z0-9_-]{11})(?:&|$)/i);
+  if (watchYt && /youtube\.com/i.test(h)) {
+    return `https://www.youtube.com/watch?v=${watchYt[1]}`;
+  }
+  const vimeoId = h.match(/(?:player\.)?vimeo\.com\/(?:video\/)?(\d+)/i);
+  if (vimeoId) return `https://vimeo.com/${vimeoId[1]}`;
+  return h;
+}
+
+function isShareOrSiteNoise(url) {
+  const u = url.toLowerCase();
+  if (u.includes("bigearsfestival.org")) return true;
+  if (u.includes("facebook.com/share")) return true;
+  if (u.includes("facebook.com/sharer")) return true;
+  if (u.includes("facebook.com/dialog")) return true;
+  if (u.includes("facebook.com/tr?")) return true;
+  if (u.includes("twitter.com/intent")) return true;
+  if (u.includes("linkedin.com/share")) return true;
+  if (u.startsWith("mailto:")) return true;
+  return false;
+}
+
+function hrefLooksLikeMediaOrSocial(href) {
+  const u = href.toLowerCase();
+  return (
+    /youtube\.com|youtu\.be/.test(u) ||
+    /vimeo\.com/.test(u) ||
+    /instagram\.com/.test(u) ||
+    /twitter\.com|:\/\/x\.com\//.test(u) ||
+    (/facebook\.com/.test(u) &&
+      !/share|sharer|dialog|\/tr\?|plugins|connect|fbevents/.test(u)) ||
+    /spotify\.com|open\.spotify/.test(u) ||
+    /soundcloud\.com/.test(u) ||
+    /bandcamp\.com/.test(u) ||
+    /tiktok\.com/.test(u) ||
+    /music\.apple\.com/.test(u)
+  );
+}
+
+function extractLinks($, $c) {
+  /** @type {Map<string, string>} */
+  const byNorm = new Map();
+
+  function pushPair(normUrl, label) {
+    if (!normUrl || isShareOrSiteNoise(normUrl)) return;
+    const def = defaultLinkLabel(normUrl);
+    const prev = byNorm.get(normUrl);
+    if (prev === undefined) {
+      byNorm.set(normUrl, label);
+      return;
+    }
+    const prevIsDef = prev === def;
+    const newIsDef = label === def;
+    if (prevIsDef && !newIsDef) byNorm.set(normUrl, label);
+  }
+
+  $c.find("iframe[src], iframe[data-src]").each((_, el) => {
+    const $el = $(el);
+    const raw = $el.attr("src") || $el.attr("data-src") || "";
+    if (!raw) return;
+    const src = decodeEntitiesInUrl(raw);
+    const norm = normalizeMediaUrl(src);
+    if (/youtube\.com\/watch|youtu\.be/i.test(norm) || /youtube\.com/i.test(src)) {
+      pushPair(norm, "YouTube");
+    } else if (/vimeo\.com/i.test(norm)) {
+      pushPair(norm, "Vimeo");
+    } else if (/spotify\.com/i.test(norm)) {
+      pushPair(norm, "Spotify");
+    } else if (/soundcloud\.com/i.test(norm)) {
+      pushPair(norm, "SoundCloud");
+    } else {
+      pushPair(norm, "Video");
+    }
+  });
+
+  $c.find("a[href]").each((_, el) => {
+    const href = $(el).attr("href");
+    if (!href) return;
+    const abs = absoluteDetailUrl(href);
+    if (!abs || isShareOrSiteNoise(abs)) return;
+    if (!hrefLooksLikeMediaOrSocial(abs)) return;
+    const norm = normalizeMediaUrl(abs);
+    if (isShareOrSiteNoise(norm)) return;
+    const text = $(el).text().replace(/\s+/g, " ").trim();
+    pushPair(norm, pickLinkLabel(norm, text));
+  });
+
+  return [...byNorm.entries()].map(([url, label]) => ({ url, label }));
+}
+
+function extractEventPage(html) {
   const $ = load(html);
   const $c = $(".entry.entry--type-event .entry__content").first();
-  if (!$c.length) return "";
+  if (!$c.length) {
+    return { description: "", links: [] };
+  }
   const paragraphs = $c
     .find("p")
     .toArray()
     .map((el) => $(el).text().replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  if (paragraphs.length) return paragraphs.join("\n\n");
-  return $c.text().replace(/\s+/g, " ").trim();
+  let description = "";
+  if (paragraphs.length) description = paragraphs.join("\n\n");
+  else description = $c.text().replace(/\s+/g, " ").trim();
+  const links = extractLinks($, $c);
+  return { description, links };
 }
 
-async function fetchDescription(absUrl) {
+async function fetchEventPageDetail(absUrl) {
+  const empty = { description: "", links: [] };
+  if (!absUrl) return empty;
   for (let attempt = 0; attempt < 3; attempt++) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), DESCRIPTION_FETCH_MS);
@@ -69,8 +208,7 @@ async function fetchDescription(absUrl) {
         continue;
       }
       const html = await res.text();
-      const text = extractDescription(html);
-      if (text) return text;
+      return extractEventPage(html);
     } catch {
       /* timeout, network, parse */
     } finally {
@@ -78,7 +216,7 @@ async function fetchDescription(absUrl) {
     }
     if (attempt < 2) await new Promise((r) => setTimeout(r, 700));
   }
-  return "";
+  return empty;
 }
 
 async function attachDescriptions(shows) {
@@ -94,7 +232,9 @@ async function attachDescriptions(shows) {
       if (i >= n) return;
       const show = shows[i];
       const url = absoluteDetailUrl(show.detailUrl);
-      show.description = url ? await fetchDescription(url) : "";
+      const page = url ? await fetchEventPageDetail(url) : { description: "", links: [] };
+      show.description = page.description;
+      show.links = page.links;
       done += 1;
       if (done % 25 === 0 || done === n) {
         console.error(`  descriptions ${done}/${n}`);
@@ -277,6 +417,7 @@ async function main() {
       end: end.toISO(),
       dateKind,
       description: "",
+      links: [],
       raw: {
         dateLine: rawDateLabel,
         times: timeStrings.map((t) => t.trim()),
@@ -300,6 +441,7 @@ async function main() {
 
   const withDesc = shows.filter((s) => s.description && s.description.length > 0)
     .length;
+  const withLinks = shows.filter((s) => s.links && s.links.length > 0).length;
   const scrapedAt = DateTime.now().setZone(ZONE).toISO();
 
   const doc = {
@@ -313,6 +455,7 @@ async function main() {
       showCount: shows.length,
       venueCount: venues.length,
       descriptionCount: withDesc,
+      linkCount: withLinks,
     },
     venues,
     shows,
@@ -321,7 +464,7 @@ async function main() {
   await mkdir(dirname(OUT), { recursive: true });
   await writeFile(OUT, JSON.stringify(doc, null, 2) + "\n", "utf8");
   console.log(
-    `Wrote ${shows.length} shows (${withDesc} with descriptions), ${venues.length} venues → ${OUT}`
+    `Wrote ${shows.length} shows (${withDesc} with descriptions, ${withLinks} with links), ${venues.length} venues → ${OUT}`
   );
 }
 

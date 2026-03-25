@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -17,17 +18,18 @@ import {
   tabLabel,
   type ShowOnDay,
 } from "@/lib/scheduleByDay";
-import { ExternalLink } from "@/components/ExternalLink";
-import { RatingCountsSummary } from "@/components/RatingCountsSummary";
 import { FilterTrigger } from "@/components/FilterTrigger";
-import { ThemeSettings } from "@/components/ThemeSettings";
-import { TopBarActions } from "@/components/TopBarActions";
+import { RatingCountsSummary } from "@/components/RatingCountsSummary";
+import { SettingsPanel } from "@/components/SettingsPanel";
+import { ShowCard } from "@/components/ShowCard";
 import { useSwipeChangeDay } from "@/hooks/useSwipeChangeDay";
 import type { ScheduleDoc } from "@/types/schedule";
 
 import scheduleJson from "../data/schedule.json";
 
 const schedule = scheduleJson as ScheduleDoc;
+
+type MainView = "schedule" | "search" | "settings";
 
 type SortMode = "time" | "favorites";
 
@@ -101,20 +103,10 @@ function countRatingsForDay(
   return counts;
 }
 
-function formatRange(show: ShowOnDay["show"], zone: string): string {
-  const s = DateTime.fromISO(show.start, { zone });
-  const e = DateTime.fromISO(show.end, { zone });
-  if (s.toISODate() === e.toISODate()) {
-    return `${s.toFormat("h:mm a")} – ${e.toFormat("h:mm a")}`;
-  }
-  return `${s.toFormat("ccc LLL d, h:mm a")} – ${e.toFormat("ccc LLL d, h:mm a")}`;
-}
-
 export default function App() {
   const zone = schedule.meta.timezone;
-  const { getRating, setRating, setRatingBulk } = useShowRatings(
-    schedule.meta.festivalId
-  );
+  const festivalId = schedule.meta.festivalId;
+  const { getRating, setRating, setRatingBulk } = useShowRatings(festivalId);
 
   const showById = useMemo(() => {
     const m = new Map<string, (typeof schedule.shows)[0]>();
@@ -133,20 +125,14 @@ export default function App() {
     [venuesSorted]
   );
   const { hidden, toggleHidden, toggleAllVenues, hideVenuesBulk, isHidden } =
-    useHiddenVenues(schedule.meta.festivalId, venueIdsList);
+    useHiddenVenues(festivalId, venueIdsList);
 
   const allVenuesSelected = hidden.size === 0;
 
-  const byDay = useMemo(
-    () => buildShowsByDay(schedule.shows, zone),
-    [zone]
-  );
+  const byDay = useMemo(() => buildShowsByDay(schedule.shows, zone), [zone]);
   const dayKeys = useMemo(() => sortedDayKeys(byDay), [byDay]);
 
-  const [activeDay, setActiveDay] = usePersistedActiveDay(
-    schedule.meta.festivalId,
-    dayKeys
-  );
+  const [activeDay, setActiveDay] = usePersistedActiveDay(festivalId, dayKeys);
   const [sortMode, setSortMode] = useState<SortMode>("time");
   const [visibility, setVisibility] = useState<Visibility>({
     love: true,
@@ -156,7 +142,9 @@ export default function App() {
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const activeDayHeadingId = useId();
+  const [mainView, setMainView] = useState<MainView>("schedule");
+  const [searchQuery, setSearchQuery] = useState("");
+
   const filtersPanelId = useId();
   const dayTabsNavRef = useRef<HTMLElement>(null);
   const tabBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
@@ -180,6 +168,19 @@ export default function App() {
     [activeDay, byDay, getRating, isHidden]
   );
 
+  const festivalRatingCounts = useMemo(() => {
+    const counts = { love: 0, like: 0, skip: 0, unset: 0 };
+    for (const show of schedule.shows) {
+      if (isHidden(show.venueId)) continue;
+      const r = getRating(show.id);
+      if (r === "love") counts.love++;
+      else if (r === "like") counts.like++;
+      else if (r === "skip") counts.skip++;
+      else counts.unset++;
+    }
+    return counts;
+  }, [getRating, isHidden]);
+
   const rows = useMemo(() => {
     const list = byDay.get(activeDay) ?? [];
     return list
@@ -187,6 +188,25 @@ export default function App() {
       .filter((row) => isVisible(getRating(row.show.id), visibility))
       .sort((a, b) => compareRows(a, b, sortMode, getRating));
   }, [activeDay, byDay, getRating, isHidden, sortMode, visibility]);
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return schedule.shows
+      .filter((s) => {
+        if (s.title.toLowerCase().includes(q)) return true;
+        if ((s.description ?? "").toLowerCase().includes(q)) return true;
+        return false;
+      })
+      .sort((a, b) => {
+        const t = a.title.localeCompare(b.title);
+        if (t !== 0) return t;
+        return (
+          DateTime.fromISO(a.start).toMillis() -
+          DateTime.fromISO(b.start).toMillis()
+        );
+      });
+  }, [searchQuery]);
 
   const selectedCount = selectedIds.size;
 
@@ -213,6 +233,10 @@ export default function App() {
     setSelectedIds(new Set());
   }, []);
 
+  useEffect(() => {
+    if (mainView !== "schedule") clearSelection();
+  }, [mainView, clearSelection]);
+
   const selectedIdArray = useMemo(() => [...selectedIds], [selectedIds]);
 
   const applyBulkRating = useCallback(
@@ -235,380 +259,376 @@ export default function App() {
     clearSelection();
   }, [clearSelection, hideVenuesBulk, selectedIdArray, showById]);
 
-  if (dayKeys.length === 0) {
-    return (
-      <>
-        <TopBarActions festivalId={schedule.meta.festivalId} />
-        <div className="app app--empty">
-          <p>No shows in schedule.</p>
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
-      <div className={`app${selectedCount > 0 ? " app--selecting" : ""}`}>
-      <header className="header">
-        <div className="header__top">
-          <div className="header__start">
-            <FilterTrigger
-              filtersOpen={filtersOpen}
-              onToggle={() => setFiltersOpen((o) => !o)}
-              panelId={filtersPanelId}
-            />
-          </div>
-          <div className="header__brand">
-            <h1 className="header__title">{schedule.meta.name}</h1>
-            <div className="header__rating-wrap" aria-hidden="true">
-              <RatingCountsSummary
-                counts={activeDayRatingCounts}
-                className="header__rating-summary"
-              />
-            </div>
-          </div>
-          <div className="header__end">
-            <div className="header__settings">
-              <ThemeSettings festivalId={schedule.meta.festivalId} />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <nav
-        ref={dayTabsNavRef}
-        className="day-tabs"
-        aria-label="Festival days"
-      >
-        {dayKeys.map((key) => (
-          <button
-            key={key}
-            ref={(el) => {
-              if (el) tabBtnRefs.current.set(key, el);
-              else tabBtnRefs.current.delete(key);
-            }}
-            type="button"
-            className={`day-tabs__btn${key === activeDay ? " is-active" : ""}`}
-            onClick={() => setActiveDay(key)}
-          >
-            {tabLabel(key, zone)}
-          </button>
-        ))}
-      </nav>
-
       <div
-        className="app__day-swipe"
-        role="region"
-        aria-label="Schedule — swipe left or right to change day"
-        onTouchStart={swipeDayHandlers.onTouchStart}
-        onTouchEnd={swipeDayHandlers.onTouchEnd}
+        className={`app${selectedCount > 0 && mainView === "schedule" ? " app--selecting" : ""}`}
       >
-      <section
-        className="day-section"
-        aria-labelledby={activeDayHeadingId}
-      >
-        <div className="day-section__head">
-          <h2 className="day-section__title" id={activeDayHeadingId}>
-            {tabLabel(activeDay, zone)}
-          </h2>
-          <RatingCountsSummary
-            counts={activeDayRatingCounts}
-            className="day-section__rating-summary"
-          />
-        </div>
-      </section>
-
-      {filtersOpen && (
-        <section
-          id={filtersPanelId}
-          className="filters"
-          aria-label="Sort and visibility"
+        <nav
+          className="app-main-tabs"
+          role="tablist"
+          aria-label="App sections"
         >
-          <div className="filters__row">
-            <label className="filters__label">
-              Sort
-              <select
-                className="filters__select"
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value as SortMode)}
-              >
-                <option value="time">By start time</option>
-                <option value="favorites">Favorites first</option>
-              </select>
-            </label>
-            <p className="filters__hint">
-              Favorites first orders: ❤️ → 👀 → ? → × (then by time within each
-              group).
-            </p>
-          </div>
-          <fieldset className="filters__fieldset">
-            <legend>Show ratings</legend>
-            <div className="filters__checks">
-              {(
-                [
-                  ["love", "Show love ratings"],
-                  ["like", "Show like ratings"],
-                  ["unset", "Show unrated performances"],
-                  ["skip", "Show skip ratings"],
-                ] as const
-              ).map(([key, ariaLabel]) => (
-                <label
-                  key={key}
-                  className="filters__check filters__check--rating-symbol"
-                >
-                  <input
-                    type="checkbox"
-                    checked={visibility[key]}
-                    onChange={(e) =>
-                      setVisibility((v) => ({ ...v, [key]: e.target.checked }))
-                    }
-                    aria-label={ariaLabel}
-                  />
-                  {key === "love" ? (
-                    <span className="filters__rating-emoji" aria-hidden>
-                      ❤️
-                    </span>
-                  ) : key === "like" ? (
-                    <span className="filters__rating-emoji" aria-hidden>
-                      👀
-                    </span>
-                  ) : key === "unset" ? (
-                    <span
-                      className="filters__rating-emoji filters__rating-emoji--unset"
-                      aria-hidden
-                    >
-                      ?
-                    </span>
-                  ) : (
-                    <span
-                      className="filters__rating-emoji filters__rating-emoji--skip"
-                      aria-hidden
-                    >
-                      ×
-                    </span>
-                  )}
-                </label>
-              ))}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mainView === "schedule"}
+            className={`app-main-tabs__btn${mainView === "schedule" ? " is-active" : ""}`}
+            onClick={() => setMainView("schedule")}
+          >
+            Schedule
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mainView === "search"}
+            className={`app-main-tabs__btn${mainView === "search" ? " is-active" : ""}`}
+            onClick={() => setMainView("search")}
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mainView === "settings"}
+            className={`app-main-tabs__btn${mainView === "settings" ? " is-active" : ""}`}
+            onClick={() => setMainView("settings")}
+          >
+            Settings
+          </button>
+        </nav>
+
+        {mainView === "search" ? (
+          <header className="header">
+            <div className="header__top header__top--solo">
+              <div className="header__brand header__brand--solo">
+                <h1 className="header__title">{schedule.meta.name}</h1>
+              </div>
             </div>
-            <p className="filters__hint filters__hint--tight">
-              Uncheck <strong>×</strong> to hide acts you marked skip. Combine with{" "}
-              <strong>Favorites first</strong> to keep ❤️ / 👀 near the top.
-            </p>
-          </fieldset>
-          <fieldset className="filters__fieldset filters__fieldset--venues">
-            <legend>Venues</legend>
-            <p className="filters__hint filters__hint--tight">
-              Uncheck a venue to <strong>filter it out</strong> (hide all shows
-              there). Use <strong>Select all</strong> / <strong>Deselect all</strong>{" "}
-              to toggle every venue at once. Your choices are saved in this browser.
-            </p>
-            <div className="filters__venue-actions">
+          </header>
+        ) : null}
+
+        {mainView === "schedule" && dayKeys.length > 0 ? (
+          <>
+            <nav
+              ref={dayTabsNavRef}
+              className="day-tabs"
+              aria-label="Festival days"
+            >
+              {dayKeys.map((key) => (
+                <button
+                  key={key}
+                  ref={(el) => {
+                    if (el) tabBtnRefs.current.set(key, el);
+                    else tabBtnRefs.current.delete(key);
+                  }}
+                  type="button"
+                  className={`day-tabs__btn${key === activeDay ? " is-active" : ""}`}
+                  onClick={() => setActiveDay(key)}
+                >
+                  {tabLabel(key, zone)}
+                </button>
+              ))}
+            </nav>
+
+            <div
+              className="app__day-swipe"
+              role="region"
+              aria-label="Schedule — swipe left or right to change day"
+              onTouchStart={swipeDayHandlers.onTouchStart}
+              onTouchEnd={swipeDayHandlers.onTouchEnd}
+            >
+              <section
+                className="day-section"
+                aria-label={`Shows for ${tabLabel(activeDay, zone)}`}
+              >
+                <div className="day-section__head">
+                  <div className="day-section__filter">
+                    <FilterTrigger
+                      filtersOpen={filtersOpen}
+                      onToggle={() => setFiltersOpen((o) => !o)}
+                      panelId={filtersPanelId}
+                    />
+                  </div>
+                  <RatingCountsSummary
+                    counts={activeDayRatingCounts}
+                    className="day-section__rating-summary"
+                  />
+                </div>
+              </section>
+
+              {filtersOpen && (
+                <section
+                  id={filtersPanelId}
+                  className="filters"
+                  aria-label="Sort and visibility"
+                >
+                  <div className="filters__row">
+                    <label className="filters__label">
+                      Sort
+                      <select
+                        className="filters__select"
+                        value={sortMode}
+                        onChange={(e) =>
+                          setSortMode(e.target.value as SortMode)
+                        }
+                      >
+                        <option value="time">By start time</option>
+                        <option value="favorites">Favorites first</option>
+                      </select>
+                    </label>
+                    <p className="filters__hint">
+                      Favorites first orders: ❤️ → 👀 → ? → × (then by time
+                      within each group).
+                    </p>
+                  </div>
+                  <fieldset className="filters__fieldset">
+                    <legend>Show ratings</legend>
+                    <div className="filters__checks">
+                      {(
+                        [
+                          ["love", "Show love ratings"],
+                          ["like", "Show like ratings"],
+                          ["unset", "Show unrated performances"],
+                          ["skip", "Show skip ratings"],
+                        ] as const
+                      ).map(([key, ariaLabel]) => (
+                        <label
+                          key={key}
+                          className="filters__check filters__check--rating-symbol"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={visibility[key]}
+                            onChange={(e) =>
+                              setVisibility((v) => ({
+                                ...v,
+                                [key]: e.target.checked,
+                              }))
+                            }
+                            aria-label={ariaLabel}
+                          />
+                          {key === "love" ? (
+                            <span className="filters__rating-emoji" aria-hidden>
+                              ❤️
+                            </span>
+                          ) : key === "like" ? (
+                            <span className="filters__rating-emoji" aria-hidden>
+                              👀
+                            </span>
+                          ) : key === "unset" ? (
+                            <span
+                              className="filters__rating-emoji filters__rating-emoji--unset"
+                              aria-hidden
+                            >
+                              ?
+                            </span>
+                          ) : (
+                            <span
+                              className="filters__rating-emoji filters__rating-emoji--skip"
+                              aria-hidden
+                            >
+                              ×
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="filters__hint filters__hint--tight">
+                      Uncheck <strong>×</strong> to hide acts you marked skip.
+                      Combine with <strong>Favorites first</strong> to keep ❤️ /
+                      👀 near the top.
+                    </p>
+                  </fieldset>
+                  <fieldset className="filters__fieldset filters__fieldset--venues">
+                    <legend>Venues</legend>
+                    <p className="filters__hint filters__hint--tight">
+                      Uncheck a venue to <strong>filter it out</strong> (hide all
+                      shows there). Use <strong>Select all</strong> /{" "}
+                      <strong>Deselect all</strong> to toggle every venue at once.
+                      Your choices are saved in this browser.
+                    </p>
+                    <div className="filters__venue-actions">
+                      <button
+                        type="button"
+                        className="filters__linkish"
+                        onClick={toggleAllVenues}
+                      >
+                        {allVenuesSelected
+                          ? "Deselect all venues"
+                          : "Select all venues"}
+                      </button>
+                    </div>
+                    <div className="filters__venues">
+                      {venuesSorted.map((v) => (
+                        <label
+                          key={v.id}
+                          className="filters__check filters__check--venue"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!isHidden(v.id)}
+                            onChange={() => toggleHidden(v.id)}
+                          />
+                          {v.name}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                </section>
+              )}
+
+              <ul className="show-list">
+                {rows.map(({ show, effectiveStart }) => (
+                  <ShowCard
+                    key={show.id}
+                    show={show}
+                    effectiveStart={effectiveStart}
+                    zone={zone}
+                    rating={getRating(show.id)}
+                    onRate={(next) => setRating(show.id, next)}
+                    selected={selectedIds.has(show.id)}
+                    onToggleSelect={() => toggleSelected(show.id)}
+                  />
+                ))}
+              </ul>
+
+              {rows.length === 0 ? (
+                <p className="empty-day">
+                  No shows match your filters for this day.
+                </p>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+
+        {mainView === "schedule" && dayKeys.length === 0 ? (
+          <p className="empty-day">No shows in schedule.</p>
+        ) : null}
+
+        {mainView === "search" ? (
+          <div className="search-view">
+            <label className="search-view__label" htmlFor="act-search-input">
+              Search acts
+            </label>
+            <input
+              id="act-search-input"
+              type="search"
+              className="search-view__input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Title or description contains…"
+              autoComplete="off"
+              spellCheck={true}
+            />
+            <ul className="show-list">
+              {searchResults.map((show) => (
+                <ShowCard
+                  key={show.id}
+                  show={show}
+                  effectiveStart={DateTime.fromISO(show.start, { zone })}
+                  zone={zone}
+                  rating={getRating(show.id)}
+                  onRate={(next) => setRating(show.id, next)}
+                  selected={false}
+                  onToggleSelect={() => {}}
+                  showPick={false}
+                />
+              ))}
+            </ul>
+            {searchQuery.trim() && searchResults.length === 0 ? (
+              <p className="search-view__empty">No acts match that text.</p>
+            ) : null}
+            {!searchQuery.trim() ? (
+              <p className="search-view__hint">
+                Type to find acts by title or description.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {mainView === "settings" ? (
+          <SettingsPanel
+            festivalId={festivalId}
+            scheduleTitle={`Big Ears ${schedule.meta.year}`}
+            ratingCounts={festivalRatingCounts}
+          />
+        ) : null}
+
+        {selectedCount > 0 && mainView === "schedule" && dayKeys.length > 0 ? (
+          <div className="bulk-bar" role="region" aria-label="Bulk actions">
+            <p className="bulk-bar__count">{selectedCount} selected</p>
+            <div className="bulk-bar__actions">
               <button
                 type="button"
-                className="filters__linkish"
-                onClick={toggleAllVenues}
+                className="bulk-bar__btn"
+                onClick={selectAllVisible}
               >
-                {allVenuesSelected
-                  ? "Deselect all venues"
-                  : "Select all venues"}
+                Add visible to selection
+              </button>
+              <button
+                type="button"
+                className="bulk-bar__btn"
+                onClick={clearSelection}
+              >
+                Clear selection
               </button>
             </div>
-            <div className="filters__venues">
-              {venuesSorted.map((v) => (
-                <label
-                  key={v.id}
-                  className="filters__check filters__check--venue"
+            <div className="bulk-bar__actions bulk-bar__actions--rates">
+              <span className="bulk-bar__label">Set rating:</span>
+              <button
+                type="button"
+                className="bulk-bar__btn bulk-bar__btn--love"
+                aria-label="Love — apply to selected"
+                onClick={() => applyBulkRating("love")}
+              >
+                <span className="rate-btn__icon" aria-hidden>
+                  ❤️
+                </span>
+              </button>
+              <button
+                type="button"
+                className="bulk-bar__btn bulk-bar__btn--like"
+                aria-label="Like — apply to selected"
+                onClick={() => applyBulkRating("like")}
+              >
+                <span className="rate-btn__icon" aria-hidden>
+                  👀
+                </span>
+              </button>
+              <button
+                type="button"
+                className="bulk-bar__btn bulk-bar__btn--skip"
+                aria-label="Skip — apply to selected"
+                onClick={() => applyBulkRating("skip")}
+              >
+                <span
+                  className="rate-btn__icon rate-btn__icon--skip"
+                  aria-hidden
                 >
-                  <input
-                    type="checkbox"
-                    checked={!isHidden(v.id)}
-                    onChange={() => toggleHidden(v.id)}
-                  />
-                  {v.name}
-                </label>
-              ))}
+                  ×
+                </span>
+              </button>
+              <button
+                type="button"
+                className="bulk-bar__btn"
+                onClick={() => applyBulkRating("unset")}
+              >
+                Clear rating
+              </button>
             </div>
-          </fieldset>
-        </section>
-      )}
-
-      <ul className="show-list">
-        {rows.map(({ show, effectiveStart }) => {
-          const r = getRating(show.id);
-          const isSelected = selectedIds.has(show.id);
-          return (
-            <li
-              key={show.id}
-              className={`show-card${isSelected ? " is-selected" : ""}${
-                r === "love" || r === "like" || r === "skip"
-                  ? ` show-card--${r}`
-                  : ""
-              }`}
-            >
-              <div className="show-card__pick">
-                <input
-                  type="checkbox"
-                  className="show-card__checkbox"
-                  checked={isSelected}
-                  onChange={() => toggleSelected(show.id)}
-                  aria-label={`Select ${show.title}`}
-                />
-              </div>
-              <div className="show-card__time">
-                <span className="show-card__sort-time">
-                  {effectiveStart.toFormat("h:mm a")}
-                </span>
-                <span className="show-card__range">
-                  {formatRange(show, zone)}
-                </span>
-              </div>
-              <div className="show-card__body">
-                <h2 className="show-card__title">
-                  {show.detailUrl ? (
-                    <ExternalLink href={show.detailUrl}>
-                      {show.title}
-                    </ExternalLink>
-                  ) : (
-                    show.title
-                  )}
-                </h2>
-                <p className="show-card__venue">{show.venueName}</p>
-                {show.description?.trim() ? (
-                  <details className="show-card__details">
-                    <summary className="show-card__summary">Description</summary>
-                    <div className="show-card__description">
-                      {show.description.trim()}
-                    </div>
-                  </details>
-                ) : null}
-              </div>
-              <div
-                className="show-card__rate"
-                role="group"
-                aria-label={`Rate ${show.title}`}
+            <div className="bulk-bar__actions">
+              <button
+                type="button"
+                className="bulk-bar__btn bulk-bar__btn--danger"
+                onClick={applyBulkHideVenues}
               >
-                {(
-                  [
-                    ["skip", "Skip"],
-                    ["like", "Like"],
-                    ["love", "Love"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`rate-btn rate-btn--${value}${
-                      r === value ? " is-active" : ""
-                    }`}
-                    aria-label={label}
-                    onClick={() =>
-                      setRating(show.id, r === value ? "unset" : value)
-                    }
-                  >
-                    {value === "skip" ? (
-                      <span className="rate-btn__icon rate-btn__icon--skip" aria-hidden>
-                        ×
-                      </span>
-                    ) : value === "like" ? (
-                      <span className="rate-btn__icon" aria-hidden>
-                        👀
-                      </span>
-                    ) : (
-                      <span className="rate-btn__icon" aria-hidden>
-                        ❤️
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-
-      {rows.length === 0 && (
-        <p className="empty-day">
-          No shows match your filters for this day.
-        </p>
-      )}
+                Hide venues for selected
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
-
-      {selectedCount > 0 && (
-        <div className="bulk-bar" role="region" aria-label="Bulk actions">
-          <p className="bulk-bar__count">
-            {selectedCount} selected
-          </p>
-          <div className="bulk-bar__actions">
-            <button
-              type="button"
-              className="bulk-bar__btn"
-              onClick={selectAllVisible}
-            >
-              Add visible to selection
-            </button>
-            <button
-              type="button"
-              className="bulk-bar__btn"
-              onClick={clearSelection}
-            >
-              Clear selection
-            </button>
-          </div>
-          <div className="bulk-bar__actions bulk-bar__actions--rates">
-            <span className="bulk-bar__label">Set rating:</span>
-            <button
-              type="button"
-              className="bulk-bar__btn bulk-bar__btn--love"
-              aria-label="Love — apply to selected"
-              onClick={() => applyBulkRating("love")}
-            >
-              <span className="rate-btn__icon" aria-hidden>
-                ❤️
-              </span>
-            </button>
-            <button
-              type="button"
-              className="bulk-bar__btn bulk-bar__btn--like"
-              aria-label="Like — apply to selected"
-              onClick={() => applyBulkRating("like")}
-            >
-              <span className="rate-btn__icon" aria-hidden>
-                👀
-              </span>
-            </button>
-            <button
-              type="button"
-              className="bulk-bar__btn bulk-bar__btn--skip"
-              aria-label="Skip — apply to selected"
-              onClick={() => applyBulkRating("skip")}
-            >
-              <span
-                className="rate-btn__icon rate-btn__icon--skip"
-                aria-hidden
-              >
-                ×
-              </span>
-            </button>
-            <button
-              type="button"
-              className="bulk-bar__btn"
-              onClick={() => applyBulkRating("unset")}
-            >
-              Clear rating
-            </button>
-          </div>
-          <div className="bulk-bar__actions">
-            <button
-              type="button"
-              className="bulk-bar__btn bulk-bar__btn--danger"
-              onClick={applyBulkHideVenues}
-            >
-              Hide venues for selected
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
     </>
   );
 }

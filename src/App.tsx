@@ -31,6 +31,7 @@ import { FilterTrigger } from "@/components/FilterTrigger";
 import { RatingCountsSummary } from "@/components/RatingCountsSummary";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { ShowCard } from "@/components/ShowCard";
+import { useShareScheduleLink } from "@/hooks/useShareScheduleLink";
 import { useSwipeChangeDay } from "@/hooks/useSwipeChangeDay";
 import type { ScheduleDoc } from "@/types/schedule";
 
@@ -116,6 +117,7 @@ function AppInner() {
   const zone = schedule.meta.timezone;
   const festivalId = schedule.meta.festivalId;
   const { activeProfileId, profiles } = useProfileContext();
+  const favesShare = useShareScheduleLink(festivalId, activeProfileId);
   const { getRating, setRating, setRatingBulk } = useShowRatings(
     festivalId,
     activeProfileId
@@ -155,6 +157,11 @@ function AppInner() {
     festivalId,
     activeProfileId,
     profiles
+  );
+
+  const friendProfilesList = useMemo(
+    () => profiles.filter((p) => p.id !== activeProfileId),
+    [profiles, activeProfileId]
   );
 
   const friendLinesByShowId = useMemo(() => {
@@ -205,16 +212,34 @@ function AppInner() {
     unset: true,
     skip: true,
   });
+  const [friendFilterProfileId, setFriendFilterProfileId] = useState("");
+  const [friendVisibility, setFriendVisibility] = useState<Visibility>({
+    love: true,
+    like: true,
+    unset: true,
+    skip: true,
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [mainView, setMainView] = useState<MainView>("schedule");
   const [searchQuery, setSearchQuery] = useState("");
 
   const filtersPanelId = useId();
+  const friendFilterSelectId = useId();
   const dayTabsNavRef = useRef<HTMLElement>(null);
   const tabBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   const swipeDayHandlers = useSwipeChangeDay(dayKeys, activeDay, setActiveDay);
+
+  useEffect(() => {
+    if (
+      !friendFilterProfileId ||
+      friendProfilesList.some((p) => p.id === friendFilterProfileId)
+    ) {
+      return;
+    }
+    setFriendFilterProfileId("");
+  }, [friendProfilesList, friendFilterProfileId]);
 
   useLayoutEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -248,11 +273,32 @@ function AppInner() {
 
   const rows = useMemo(() => {
     const list = byDay.get(activeDay) ?? [];
+    const friendMap = friendFilterProfileId
+      ? friendRatingsMaps[friendFilterProfileId]
+      : null;
     return list
       .filter((row) => !isHidden(row.show.venueId))
-      .filter((row) => isVisible(getRating(row.show.id), visibility))
+      .filter((row) => {
+        if (!isVisible(getRating(row.show.id), visibility)) return false;
+        if (!friendFilterProfileId || !friendMap) return true;
+        const fr: ShowRating = friendMap[row.show.id] ?? "unset";
+        return isVisible(fr, friendVisibility);
+      })
       .sort((a, b) => compareRows(a, b, sortMode, getRating));
-  }, [activeDay, byDay, getRating, isHidden, sortMode, visibility]);
+  }, [
+    activeDay,
+    byDay,
+    friendFilterProfileId,
+    friendRatingsMaps,
+    friendVisibility,
+    getRating,
+    isHidden,
+    sortMode,
+    visibility,
+  ]);
+
+  const friendFilterLabel =
+    friendProfilesList.find((p) => p.id === friendFilterProfileId)?.label ?? "";
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -478,7 +524,7 @@ function AppInner() {
                     </p>
                   </div>
                   <fieldset className="filters__fieldset">
-                    <legend>Show ratings</legend>
+                    <legend>My Ratings</legend>
                     <div className="filters__checks">
                       {(
                         [
@@ -535,6 +581,92 @@ function AppInner() {
                       👀 near the top.
                     </p>
                   </fieldset>
+                  {friendProfilesList.length > 0 ? (
+                    <fieldset className="filters__fieldset">
+                      <legend>Friend&apos;s Ratings</legend>
+                      <p className="filters__hint filters__hint--tight">
+                        Pick a friend, then choose which of their ratings still
+                        appear. Acts are hidden if they fail your filters or the
+                        selected friend&apos;s filters.
+                      </p>
+                      <label
+                        className="filters__label filters__label--friend"
+                        htmlFor={friendFilterSelectId}
+                      >
+                        Friend
+                        <select
+                          id={friendFilterSelectId}
+                          className="filters__select"
+                          value={friendFilterProfileId}
+                          onChange={(e) =>
+                            setFriendFilterProfileId(e.target.value)
+                          }
+                        >
+                          <option value="">None (don&apos;t filter)</option>
+                          {friendProfilesList.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="filters__checks">
+                        {(
+                          [
+                            ["love", "loved"],
+                            ["like", "liked"],
+                            ["unset", "unrated"],
+                            ["skip", "skipped"],
+                          ] as const
+                        ).map(([key, word]) => (
+                          <label
+                            key={key}
+                            className="filters__check filters__check--rating-symbol"
+                          >
+                            <input
+                              type="checkbox"
+                              disabled={!friendFilterProfileId}
+                              checked={friendVisibility[key]}
+                              onChange={(e) =>
+                                setFriendVisibility((v) => ({
+                                  ...v,
+                                  [key]: e.target.checked,
+                                }))
+                              }
+                              aria-label={
+                                friendFilterProfileId
+                                  ? `Show acts ${friendFilterLabel} ${word}`
+                                  : `Select a friend to filter by their ${word} acts`
+                              }
+                            />
+                            {key === "love" ? (
+                              <span className="filters__rating-emoji" aria-hidden>
+                                ❤️
+                              </span>
+                            ) : key === "like" ? (
+                              <span className="filters__rating-emoji" aria-hidden>
+                                👀
+                              </span>
+                            ) : key === "unset" ? (
+                              <span
+                                className="filters__rating-emoji filters__rating-emoji--unset"
+                                aria-hidden
+                              >
+                                ?
+                              </span>
+                            ) : (
+                              <span
+                                className="filters__rating-emoji filters__rating-emoji--skip"
+                                aria-hidden
+                              >
+                                ×
+                              </span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  ) : null}
                   <fieldset className="filters__fieldset filters__fieldset--venues">
                     <legend>Venues</legend>
                     <p className="filters__hint filters__hint--tight">
@@ -659,6 +791,29 @@ function AppInner() {
                   className="header__rating-summary"
                 />
               </div>
+            </div>
+            <div className="faves-view__share">
+              <div className="settings-page__share-actions">
+                <button
+                  type="button"
+                  className="theme-settings__import-btn"
+                  onClick={() => void favesShare.shareOrCopy()}
+                >
+                  Share…
+                </button>
+                <button
+                  type="button"
+                  className="theme-settings__import-btn"
+                  onClick={favesShare.copyShareUrl}
+                >
+                  Copy link
+                </button>
+              </div>
+              {favesShare.shareHint ? (
+                <p className="faves-view__share-hint" role="status">
+                  {favesShare.shareHint}
+                </p>
+              ) : null}
             </div>
             {favesShows.length > 0 ? (
               <p className="faves-view__subhead" id="faves-view-desc">

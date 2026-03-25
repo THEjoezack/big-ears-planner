@@ -11,12 +11,10 @@ import {
   deleteAllFriendProfiles,
   readProfileRegistry,
 } from "@/lib/profiles";
-import {
-  encodeShareImportToken,
-  SHARE_URL_WARN_LENGTH,
-} from "@/lib/shareImportCodec";
+import { encodeShareImportToken } from "@/lib/shareImportCodec";
 import { applyThemePreference, readThemePreference } from "@/lib/theme";
 import { useThemePreference } from "@/hooks/useThemePreference";
+import { useShareScheduleLink } from "@/hooks/useShareScheduleLink";
 import type { ThemePreference } from "@/lib/theme";
 
 const OPTIONS: { value: ThemePreference; label: string }[] = [
@@ -39,7 +37,10 @@ export function SettingsPanel({ festivalId }: Props) {
   const [exportText, setExportText] = useState("");
   const [importText, setImportText] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
-  const [shareHint, setShareHint] = useState<string | null>(null);
+  const { shareHint, shareOrCopy, copyShareUrl } = useShareScheduleLink(
+    festivalId,
+    activeProfileId
+  );
   const [deleteDialog, setDeleteDialog] = useState<null | "friends" | "mine">(
     null
   );
@@ -71,47 +72,6 @@ export function SettingsPanel({ festivalId }: Props) {
     }
     window.location.reload();
   }, [importText, festivalId, activeProfileId]);
-
-  const shareOrCopy = useCallback(async () => {
-    setShareHint(null);
-    const { token, length } = encodeShareImportToken(festivalId, activeProfileId);
-    const url = `${window.location.origin}${window.location.pathname}#import=${token}`;
-
-    if (length > SHARE_URL_WARN_LENGTH) {
-      setShareHint(
-        "This link is very long; some apps or browsers may not handle it. If sharing fails, use Export (Base64) instead."
-      );
-    }
-
-    try {
-      if (navigator.share) {
-        const shareData = { url, title: "Big Ears schedule share", text: "Shared festival planner data" };
-        if (!navigator.canShare || navigator.canShare(shareData)) {
-          await navigator.share(shareData);
-          return;
-        }
-      }
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setShareHint("Share was cancelled or failed. Use Copy link.");
-    }
-
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareHint("Link copied to clipboard.");
-    } catch {
-      setShareHint("Could not copy automatically. Select and copy the link from the box below.");
-    }
-  }, [festivalId, activeProfileId]);
-
-  const copyShareUrlField = useCallback(() => {
-    const { token } = encodeShareImportToken(festivalId, activeProfileId);
-    const url = `${window.location.origin}${window.location.pathname}#import=${token}`;
-    void navigator.clipboard.writeText(url).then(
-      () => setShareHint("Link copied to clipboard."),
-      () => setShareHint("Could not copy to clipboard.")
-    );
-  }, [festivalId, activeProfileId]);
 
   const friendDeleteCount = readProfileRegistry(festivalId).filter(
     (p) => p.id !== DEFAULT_PROFILE_ID
@@ -208,7 +168,7 @@ export function SettingsPanel({ festivalId }: Props) {
           <button
             type="button"
             className="theme-settings__import-btn"
-            onClick={copyShareUrlField}
+            onClick={copyShareUrl}
           >
             Copy link
           </button>

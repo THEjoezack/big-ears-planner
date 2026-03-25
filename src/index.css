@@ -119,6 +119,27 @@ body {
   font-family: system-ui, sans-serif;
 }
 
+.faves-view__share {
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.faves-view__share .settings-page__share-actions {
+  justify-content: center;
+}
+
+.faves-view__share-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.35;
+  text-align: center;
+  max-width: 22rem;
+}
+
 .faves-view__subhead {
   margin: 0 0 1rem;
   font-size: 0.85rem;
@@ -806,6 +827,16 @@ body {
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
+}
+
+.filters__label--friend {
+  max-width: none;
+  margin-bottom: 0.65rem;
+}
+
+.filters__check:has(input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .filters__fieldset {

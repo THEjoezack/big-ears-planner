@@ -21,6 +21,8 @@ type Props = {
   /** When false, hides bulk-selection checkbox (e.g. on Search tab). */
   showPick?: boolean;
   friendLines?: FriendRatingLine[];
+  /** When true, show calendar day + weekday in the time column (e.g. Search). */
+  showDayOfWeek?: boolean;
 };
 
 function friendRatingSymbol(rating: FriendRatingLine["rating"]) {
@@ -46,6 +48,7 @@ export function ShowCard({
   onToggleSelect,
   showPick = true,
   friendLines = [],
+  showDayOfWeek = false,
 }: Props) {
   return (
     <li
@@ -65,6 +68,11 @@ export function ShowCard({
         </div>
       ) : null}
       <div className="show-card__time">
+        {showDayOfWeek ? (
+          <span className="show-card__dow">
+            {effectiveStart.toFormat("ccc LLL d")}
+          </span>
+        ) : null}
         <span className="show-card__sort-time">
           {effectiveStart.toFormat("h:mm a")}
         </span>

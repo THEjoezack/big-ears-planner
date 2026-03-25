@@ -41,9 +41,9 @@ export function SettingsPanel({ festivalId }: Props) {
     festivalId,
     activeProfileId
   );
-  const [deleteDialog, setDeleteDialog] = useState<null | "friends" | "mine">(
-    null
-  );
+  const [deleteDialog, setDeleteDialog] = useState<
+    null | "friends_prompt" | "friends" | "mine"
+  >(null);
   const exportFieldId = useId();
   const importFieldId = useId();
   const profileSelectId = useId();
@@ -84,7 +84,7 @@ export function SettingsPanel({ festivalId }: Props) {
       window.alert("There are no friend profiles to remove.");
       return;
     }
-    setDeleteDialog("friends");
+    setDeleteDialog("friends_prompt");
   }, [festivalId]);
 
   const confirmDeleteFriends = useCallback(() => {
@@ -267,16 +267,24 @@ export function SettingsPanel({ festivalId }: Props) {
             aria-describedby="delete-confirm-desc"
           >
             <h2 id="delete-confirm-title" className="import-modal__title">
-              {deleteDialog === "friends"
+              {deleteDialog === "friends_prompt"
                 ? "Delete all friends’ data?"
-                : "Delete your schedule data?"}
+                : deleteDialog === "friends"
+                  ? "Confirm: remove friend profiles"
+                  : "Delete your schedule data?"}
             </h2>
             <p id="delete-confirm-desc" className="import-modal__hint">
-              {deleteDialog === "friends" ? (
+              {deleteDialog === "friends_prompt" ? (
+                <>
+                  You are about to start removing{" "}
+                  <strong>{friendDeleteCount} friend profile(s)</strong>. You
+                  will be asked once more before anything is deleted.
+                </>
+              ) : deleteDialog === "friends" ? (
                 <>
                   <strong>{friendDeleteCount} friend profile(s)</strong> will be
                   removed and their saved ratings and filters for this festival
-                  deleted. Your own profile is unchanged.
+                  deleted. Your own profile is unchanged. This cannot be undone.
                 </>
               ) : (
                 <>
@@ -290,22 +298,32 @@ export function SettingsPanel({ festivalId }: Props) {
             <div className="settings-delete-confirm__actions">
               <button
                 type="button"
-                className="import-modal__btn import-modal__btn--secondary"
+                className="settings-delete-confirm__btn settings-delete-confirm__btn--cancel"
                 onClick={() => setDeleteDialog(null)}
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className="settings-delete-confirm__delete-btn"
-                onClick={
-                  deleteDialog === "friends"
-                    ? confirmDeleteFriends
-                    : confirmDeleteMine
-                }
-              >
-                Delete
-              </button>
+              {deleteDialog === "friends_prompt" ? (
+                <button
+                  type="button"
+                  className="settings-delete-confirm__btn settings-delete-confirm__btn--continue"
+                  onClick={() => setDeleteDialog("friends")}
+                >
+                  Continue
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="settings-delete-confirm__btn settings-delete-confirm__btn--delete"
+                  onClick={
+                    deleteDialog === "friends"
+                      ? confirmDeleteFriends
+                      : confirmDeleteMine
+                  }
+                >
+                  Delete
+                </button>
+              )}
             </div>
           </div>
         </div>

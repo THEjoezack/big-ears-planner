@@ -842,6 +842,7 @@ function AppInner() {
                       selected={false}
                       onToggleSelect={() => {}}
                       showPick={false}
+                      showDayOfWeek={true}
                       friendLines={friendLinesByShowId[show.id] ?? []}
                     />
                   ))}
